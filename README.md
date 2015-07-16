@@ -54,6 +54,12 @@ The current state is appended to a ring buffer once per frame. During rewinding,
 
 A thirty-minute rewind buffer uses around 1.3 GB of memory for most games. There's no attempt to compress states yet, so a lot of memory is wasted. The length of the rewind buffer can be set by changing *rewind_seconds* in [**src/save\_states.cpp**](src/save_states.cpp) and rebuilding.
 
+## Random corruption ##
+
+This emulator also provides the ability to randomly corrupt the game's execution. The keys F3 and F4 increase and decrease the corruption chance on every CPU cycle.
+
+Unlike regular ROM corruptors, which change pieces of data in the ROM, this one actually introduces errors into the emulated CPU's operation -- right now this is represented as randomly swapping branch directions.
+
 ## Compatibility ##
 
 iNES mappers (support circuitry inside cartridges) supported so far: 0, 1, 2, 3, 4, 5 (including ExGrafix, split screen, and PRG RAM swapping), 7, 9, 10, 11, 13, 28, 71, 232. This covers the majority of ROMs.

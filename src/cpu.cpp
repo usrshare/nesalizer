@@ -308,7 +308,7 @@ static void bit(uint8_t arg) {
     overflow = arg & 0x40;
     // Set the zero and negative flags separately by using bit 8 of zn for the
     // negative flag
-    zn = (((arg << 1) & 0x100) | (a & arg)) ^ corrupt_now;
+    zn = (((arg << 1) & 0x100) | (a & arg));
 }
 
 // CMP, CPX, CPY
