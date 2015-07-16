@@ -50,6 +50,9 @@ void soft_reset()      { pending_event = pending_reset = true; }
 static bool pending_irq;
 static bool pending_nmi;
 
+static bool corrupt_now;
+unsigned int corrupt_chance = 0;
+
 #ifdef RUN_TESTS
 // The system is soft-reset when this goes from 1 to 0. Used by test ROMs.
 static unsigned ticks_till_reset;
@@ -305,7 +308,7 @@ static void bit(uint8_t arg) {
     overflow = arg & 0x40;
     // Set the zero and negative flags separately by using bit 8 of zn for the
     // negative flag
-    zn = ((arg << 1) & 0x100) | (a & arg);
+    zn = (((arg << 1) & 0x100) | (a & arg)) ^ corrupt_now;
 }
 
 // CMP, CPX, CPY
@@ -420,7 +423,7 @@ static void poll_for_interrupt();
 
 static void branch_if(bool cond) {
     ++pc;
-    if (cond) {
+    if (cond != corrupt_now) {
         read_mem(pc); // Dummy read
         // TODO: Unsafe unsigned->signed conversion - likely to work in
         // practice
@@ -864,7 +867,9 @@ void run() {
         // could possibly speed this up a bit (also,
         // https://www.cs.tcd.ie/David.Gregg/papers/toplas05.pdf). CPU
         // emulation seems to account for less than 5% of the runtime though,
-        // so it might not be worth uglifying the code for.
+        // so it might not be worth uglifying the code for
+
+	corrupt_now = (unsigned int)rand() < corrupt_chance;
 
         switch (opcode) {
 
@@ -1647,6 +1652,7 @@ static void log_instruction() {
 static void set_cpu_cold_boot_state() {
     init_array(ram, (uint8_t)0xFF);
     cpu_data_bus = 0;
+    corrupt_chance = 0;
 
     // s is later decremented to 0xFD during the reset operation
     a = s = x = y = 0;

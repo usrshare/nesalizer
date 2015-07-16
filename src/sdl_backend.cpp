@@ -101,12 +101,23 @@ Uint8 const *keys;
 // SDL thread and events
 //
 
+bool cc_held = 0;
+
 // Runs from emulation thread
 void handle_ui_keys() {
     SDL_LockMutex(event_lock);
     
     if (keys[SDL_SCANCODE_ESCAPE])
         exit(0);
+    
+
+    if (keys[SDL_SCANCODE_F3]) {
+	    if (!cc_held) { corrupt_chance += 0x1000; printf("New corrupt chance is %u\n", corrupt_chance); }
+	    cc_held = 1; }
+    else if (keys[SDL_SCANCODE_F4]) {
+	    if (!cc_held) { corrupt_chance -= 0x1000; printf("New corrupt chance is %u\n", corrupt_chance); }
+	    cc_held = 1; }
+	    else cc_held = 0;
 
     if (keys[SDL_SCANCODE_F5])
         save_state();
