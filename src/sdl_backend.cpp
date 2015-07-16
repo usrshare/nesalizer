@@ -19,7 +19,7 @@
 //
 
 // Each pixel is scaled to scale_factor*scale_factor pixels
-unsigned const scale_factor = 3;
+unsigned const scale_factor = 1;
 
 static SDL_Window   *screen;
 static SDL_Renderer *renderer;
@@ -104,13 +104,16 @@ Uint8 const *keys;
 // Runs from emulation thread
 void handle_ui_keys() {
     SDL_LockMutex(event_lock);
+    
+    if (keys[SDL_SCANCODE_ESCAPE])
+        exit(0);
 
-    if (keys[SDL_SCANCODE_S])
+    if (keys[SDL_SCANCODE_F5])
         save_state();
-    else if (keys[SDL_SCANCODE_L])
+    else if (keys[SDL_SCANCODE_F8])
         load_state();
 
-    handle_rewind(keys[SDL_SCANCODE_R]);
+    handle_rewind(keys[SDL_SCANCODE_BACKSPACE]);
 
     if (reset_pushed)
         soft_reset();

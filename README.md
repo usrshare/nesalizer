@@ -31,15 +31,15 @@ See the *Makefile* for other options. The built-in movie recording support has s
 Controls are currently hardcoded (in [**src/input.cpp**](src/input.cpp) and [**src/sdl_backend.cpp**](src/sdl_backend.cpp)) as follows:
 
 <table>
-  <tr><td>D-pad       </td><td>Arrow keys   </td></tr>
-  <tr><td>A           </td><td>X            </td></tr>
-  <tr><td>B           </td><td>Z            </td></tr>
-  <tr><td>Start       </td><td>Return       </td></tr>
-  <tr><td>Select      </td><td>Right shift  </td></tr>
-  <tr><td>Rewind      </td><td>R (hold down)</td></tr>
-  <tr><td>Save state  </td><td>S            </td></tr>
-  <tr><td>Load state  </td><td>L            </td></tr>
-  <tr><td>(Soft) reset</td><td>F5           </td></tr>
+  <tr><td>D-pad       </td><td>WASD keys    </td></tr>
+  <tr><td>A           </td><td>L            </td></tr>
+  <tr><td>B           </td><td>J            </td></tr>
+  <tr><td>Start       </td><td>E            </td></tr>
+  <tr><td>Select      </td><td>Q            </td></tr>
+  <tr><td>Rewind      </td><td>Backspace (hold down)</td></tr>
+  <tr><td>Save state  </td><td>F5            </td></tr>
+  <tr><td>Load state  </td><td>F8            </td></tr>
+  <tr><td>(Soft) reset</td><td>F11           </td></tr>
 </table>
 
 The save state is in-memory and not saved to disk yet.

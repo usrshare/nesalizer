@@ -28,23 +28,23 @@ bool reset_pushed;
 void init_input() {
     // Currently hardcoded
 
-    controller_data[0].key_a      = SDL_SCANCODE_X;
-    controller_data[0].key_b      = SDL_SCANCODE_Z;
-    controller_data[0].key_select = SDL_SCANCODE_RSHIFT;
-    controller_data[0].key_start  = SDL_SCANCODE_RETURN;
-    controller_data[0].key_up     = SDL_SCANCODE_UP;
-    controller_data[0].key_down   = SDL_SCANCODE_DOWN;
-    controller_data[0].key_left   = SDL_SCANCODE_LEFT;
-    controller_data[0].key_right  = SDL_SCANCODE_RIGHT;
+    controller_data[0].key_a      = SDL_SCANCODE_L;
+    controller_data[0].key_b      = SDL_SCANCODE_J;
+    controller_data[0].key_select = SDL_SCANCODE_Q;
+    controller_data[0].key_start  = SDL_SCANCODE_E;
+    controller_data[0].key_up     = SDL_SCANCODE_W;
+    controller_data[0].key_down   = SDL_SCANCODE_S;
+    controller_data[0].key_left   = SDL_SCANCODE_A;
+    controller_data[0].key_right  = SDL_SCANCODE_D;
 
-    controller_data[1].key_a      = SDL_SCANCODE_W;
-    controller_data[1].key_b      = SDL_SCANCODE_Q;
-    controller_data[1].key_select = SDL_SCANCODE_2;
-    controller_data[1].key_start  = SDL_SCANCODE_1;
-    controller_data[1].key_up     = SDL_SCANCODE_I;
-    controller_data[1].key_down   = SDL_SCANCODE_K;
-    controller_data[1].key_left   = SDL_SCANCODE_J;
-    controller_data[1].key_right  = SDL_SCANCODE_L;
+    controller_data[1].key_a      = SDL_SCANCODE_PERIOD;
+    controller_data[1].key_b      = SDL_SCANCODE_COMMA;
+    controller_data[1].key_select = SDL_SCANCODE_RSHIFT;
+    controller_data[1].key_start  = SDL_SCANCODE_RETURN;
+    controller_data[1].key_up     = SDL_SCANCODE_UP;
+    controller_data[1].key_down   = SDL_SCANCODE_DOWN;
+    controller_data[1].key_left   = SDL_SCANCODE_LEFT;
+    controller_data[1].key_right  = SDL_SCANCODE_RIGHT;
 }
 
 void calc_controller_state() {
@@ -103,7 +103,7 @@ void calc_controller_state() {
         c.down_was_pushed  = keys[c.key_down];
     }
 
-    reset_pushed = keys[SDL_SCANCODE_F5];
+    reset_pushed = keys[SDL_SCANCODE_F11];
 
     SDL_UnlockMutex(event_lock);
 }

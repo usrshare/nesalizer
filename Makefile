@@ -8,11 +8,11 @@ BUILD_DIR         := build
 CXX               := g++
 CC                := gcc
 # Extra flags passed during compilation and linking
-EXTRA             :=
-EXTRA_LINK        :=
+EXTRA             :=  
+EXTRA_LINK        := 
 # "debug", "release", or "release-debug". "release-debug" adds debugging
 # information in addition to optimizing.
-CONF              := debug
+CONF              := release-debug
 # If "1", includes a simple debugger (see cpu.cpp) for internal use. Has
 # readline dependency.
 INCLUDE_DEBUGGER  := 0
