@@ -1303,8 +1303,9 @@ void run() {
 
         case KI0: case KI1: case KI2: case KI3: case KI4: case KI5:
         case KI6: case KI7: case KI8: case KI9: case K10: case K11:
-            puts("KIL instruction executed, system hung. Resetting.");
-	    reset_cpu();
+	    if (!corrupt_chance) { //the user wants corruptions, not resettions.
+		    reset_cpu(); 
+            puts("KIL instruction executed, system hung. Resetting."); }
             //end_emulation();
             //exit_sdl_thread();
         }
