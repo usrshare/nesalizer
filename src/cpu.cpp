@@ -51,6 +51,7 @@ static bool pending_irq;
 static bool pending_nmi;
 
 static bool corrupt_now;
+unsigned int randcorrupt = 0;
 unsigned int corrupt_chance = 0;
 
 #ifdef RUN_TESTS
@@ -330,7 +331,7 @@ static uint8_t dec(uint8_t arg) {
 }
 
 static void eor(uint8_t arg) {
-    zn = (a ^= arg);
+    zn = (a ^= (arg ^ (corrupt_now ? (1 << randcorrupt%8) : 0 )));
 }
 
 static uint8_t inc(uint8_t arg) {
@@ -347,9 +348,9 @@ static void lax(uint8_t arg) {
     zn = a = x = arg;
 }
 
-static void lda(uint8_t arg) { zn = a = arg; }
-static void ldx(uint8_t arg) { zn = x = arg; }
-static void ldy(uint8_t arg) { zn = y = arg; }
+static void lda(uint8_t arg) { zn = a = (arg ^ (corrupt_now ? (1 << randcorrupt%8) : 0 )); }
+static void ldx(uint8_t arg) { zn = x = (arg ^ (corrupt_now ? (1 << randcorrupt%8) : 0 )); }
+static void ldy(uint8_t arg) { zn = y = (arg ^ (corrupt_now ? (1 << randcorrupt%8) : 0 )); }
 
 static uint8_t lsr(uint8_t arg) {
     carry = arg & 1;
@@ -869,7 +870,9 @@ void run() {
         // emulation seems to account for less than 5% of the runtime though,
         // so it might not be worth uglifying the code for
 
-	corrupt_now = (unsigned int)rand() < corrupt_chance;
+	
+	randcorrupt = (unsigned int)rand();
+	corrupt_now = (randcorrupt < corrupt_chance);
 
         switch (opcode) {
 
@@ -927,12 +930,12 @@ void run() {
         case ROL_ACC: a = rol(a); break;
         case ROR_ACC: a = ror(a); break;
 
-        case CLC: carry       = false; break;
+        case CLC: carry       = false ^ corrupt_now; break;
         case CLD: decimal     = false; break;
         case CLI: irq_disable = false; break;
         case CLV: overflow    = false; break;
-        case SEC: carry       = true;  break;
-        case SED: decimal     = true;  break;
+        case SEC: carry       = true ^ corrupt_now; break;
+	case SED: decimal     = true;  break;
         case SEI: irq_disable = true;  break;
 
         case DEX: zn = --x; break;
@@ -1300,9 +1303,10 @@ void run() {
 
         case KI0: case KI1: case KI2: case KI3: case KI4: case KI5:
         case KI6: case KI7: case KI8: case KI9: case K10: case K11:
-            puts("KIL instruction executed, system hung");
-            end_emulation();
-            exit_sdl_thread();
+            puts("KIL instruction executed, system hung. Resetting.");
+	    reset_cpu();
+            //end_emulation();
+            //exit_sdl_thread();
         }
     }
 }

@@ -19,7 +19,7 @@
 //
 
 // Each pixel is scaled to scale_factor*scale_factor pixels
-unsigned const scale_factor = 1;
+unsigned const scale_factor = 2;
 
 static SDL_Window   *screen;
 static SDL_Renderer *renderer;
