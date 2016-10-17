@@ -1522,7 +1522,7 @@ needs_second_operand:
 
 static void log_instruction() {
     if (debug_mode == RUN) {
-        if ((n_breakpoints_set > 0 && breakpoint_at[pc]) || keys[SDL_SCANCODE_F8])
+        if ((n_breakpoints_set > 0 && breakpoint_at[pc]) || keys[SDL_SCANCODE_F7])
             debug_mode = SINGLE_STEP;
         else
             return;

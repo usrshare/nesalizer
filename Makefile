@@ -15,7 +15,7 @@ EXTRA_LINK        :=
 CONF              := release-debug
 # If "1", includes a simple debugger (see cpu.cpp) for internal use. Has
 # readline dependency.
-INCLUDE_DEBUGGER  := 0
+INCLUDE_DEBUGGER  := 1
 # If "1", a movie is recorded to movie.mp4 using libav (movie.cpp)
 RECORD_MOVIE      := 0
 # If "1", passes -rdynamic to add symbols for backtraces

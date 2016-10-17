@@ -38,7 +38,7 @@ Controls are currently hardcoded (in [**src/input.cpp**](src/input.cpp) and [**s
   <tr><td>Select      </td><td>Q            </td></tr>
   <tr><td>Rewind      </td><td>Backspace (hold down)</td></tr>
   <tr><td>Save state  </td><td>F5            </td></tr>
-  <tr><td>Load state  </td><td>F8            </td></tr>
+  <tr><td>Load state  </td><td>F7            </td></tr>
   <tr><td>(Soft) reset</td><td>F11           </td></tr>
 </table>
 
