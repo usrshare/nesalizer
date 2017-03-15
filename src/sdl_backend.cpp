@@ -12,8 +12,10 @@
 #  include "test.h"
 #endif
 
-#include <SDL.h>
+#include "dbgfont.xpm"
 
+#include <SDL.h>
+#include <SDL_image.h>
 //
 // Video
 //
@@ -24,6 +26,8 @@ unsigned const scale_factor = 2;
 static SDL_Window   *screen;
 static SDL_Renderer *renderer;
 static SDL_Texture  *screen_tex;
+
+static SDL_Texture  *dbg_font;
 
 int win_w = 640;
 int win_h = 480;
@@ -280,6 +284,12 @@ void init_sdl() {
 					SDL_TEXTUREACCESS_STREAMING,
 					280, 240)),
 			"failed to create texture for screen: %s", SDL_GetError());
+
+	SDL_Surface* dbgfontsurf;
+	fail_if(!(dbgfontsurf = IMG_ReadXPMFromArray(dbgfont_xpm)),"failed to load debug font: %s", SDL_GetError());
+
+	dbg_font = SDL_CreateTextureFromSurface(renderer,dbgfontsurf);
+	SDL_FreeSurface(dbgfontsurf);
 
 	static Uint32 render_buffers[2][240*256];
 	back_buffer  = render_buffers[0];

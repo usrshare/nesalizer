@@ -58,7 +58,7 @@ c_objects   = $(addprefix $(BUILD_DIR)/,$(c_sources:=.o))
 objects     = $(c_objects) $(cpp_objects)
 deps        = $(addprefix $(BUILD_DIR)/,$(c_sources:=.d) $(cpp_sources:=.d))
 
-LDLIBS := $(shell sdl2-config --libs) -lrt
+LDLIBS := $(shell sdl2-config --libs) -lSDL2_image -lrt
 
 ifeq ($(INCLUDE_DEBUGGER),1)
     LDLIBS += -lreadline
