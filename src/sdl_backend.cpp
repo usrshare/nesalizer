@@ -176,6 +176,8 @@ static void process_events() {
 	SDL_UnlockMutex(event_lock);
 }
 
+const SDL_Rect screentex_valid = {.x = 12, .y = 0, .w = 256, .h = 240};
+
 void sdl_thread() {
 	for (;;) {
 
@@ -199,7 +201,8 @@ void sdl_thread() {
 
 		// Draw the new frame
 
-		fail_if(SDL_UpdateTexture(screen_tex, 0, front_buffer, 256*sizeof(Uint32)),
+
+		fail_if(SDL_UpdateTexture(screen_tex, &screentex_valid, front_buffer, 256*sizeof(Uint32)),
 				"failed to update screen texture: %s", SDL_GetError());
 		fail_if(SDL_RenderCopy(renderer, screen_tex, 0, 0),
 				"failed to copy rendered frame to render target: %s", SDL_GetError());
@@ -275,7 +278,7 @@ void init_sdl() {
 					// internally on little-endian systems
 					SDL_PIXELFORMAT_ARGB8888,
 					SDL_TEXTUREACCESS_STREAMING,
-					256, 240)),
+					280, 240)),
 			"failed to create texture for screen: %s", SDL_GetError());
 
 	static Uint32 render_buffers[2][240*256];
