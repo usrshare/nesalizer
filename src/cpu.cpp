@@ -1525,10 +1525,11 @@ static void log_instruction() {
 	if ((debug_mode == SINGLE_STEP) || (frame_offset == 0)) {
 		//every frame, output new debugger values
 
-	mvsdldbg_printf(96, 0, "A: %02X", a);
-	mvsdldbg_printf(96, 1, "X: %02X", x);
-	mvsdldbg_printf(96, 2, "Y: %02X", y);
-	mvsdldbg_printf(96, 3, "S: %02X", s);
+	mvsdldbg_printf(96, 0, "PC: %04X", pc);
+	mvsdldbg_printf(96, 1, "A:  %02X", a);
+	mvsdldbg_printf(96, 2, "X:  %02X", x);
+	mvsdldbg_printf(96, 3, "Y:  %02X", y);
+	mvsdldbg_printf(96, 4, "SP: %02X", s);
 
         mvsdldbg_printf(96, 5, "%c%c%c%c%c%c",carry ? 'C' : 'c', !(zn & 0xFF) ? 'Z' : 'z', irq_disable ? 'I' : 'i', decimal ? 'D' : 'd', overflow ? 'V' : 'v', !!(zn & 0x180) ? 'N' : 'n');
 
