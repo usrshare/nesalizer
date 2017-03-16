@@ -2,6 +2,7 @@
 # Configuration variables
 #
 
+PREFIX = /usr/local
 EXECUTABLE        = nesalizer
 # Separate build directory
 BUILD_DIR         = build
@@ -172,6 +173,9 @@ $(BUILD_DIR): ; $(q)mkdir $(BUILD_DIR)
 # exist, but shouldn't be affected by modifications to its contents. Hence an
 # order-only dependency.
 $(objects) $(deps): | $(BUILD_DIR)
+
+install: $(BUILD_DIR)/$(EXECUTABLE)
+	install $(BUILD_DIR)/$(EXECUTABLE) $(PREFIX)/bin/
 
 .PHONY: clean
 clean: ; $(q)-rm -rf $(BUILD_DIR)

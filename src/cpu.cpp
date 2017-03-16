@@ -22,11 +22,6 @@
 #include "sdl_backend.h"
 #include "timing.h"
 
-#ifdef INCLUDE_DEBUGGER
-#  include <readline/history.h>
-#  include <readline/readline.h>
-#endif
-
 //
 // Event signaling
 //
@@ -1572,11 +1567,10 @@ static void log_instruction() {
 
     for (;;) {
         draw_frame();
-        char *const line = readline("Debug: ");
-        if (line) {
-            if (!*line) return;
-
-            add_history(line);
+	char line[80];
+       	int l = sdl_text_prompt("Debug:", line, 80);	
+        if (l) {
+            if (!(line[0])) return;
 
             char *const keyword = strtok(line, delims);
             if (keyword) {
@@ -1602,7 +1596,6 @@ static void log_instruction() {
 
                 case 'c':
                     debug_mode = RUN;
-                    free(line);
 
                     // Process input events to avoid another <F8> being
                     // detected immediately
@@ -1659,7 +1652,6 @@ static void log_instruction() {
                     break;
                 }
             }
-            free(line);
         }
     }
 }

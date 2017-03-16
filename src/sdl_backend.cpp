@@ -76,8 +76,10 @@ Uint8 debug_contents[128 * 60]; //640x480 / 5x8 font
 Uint8 debug_colors[128*60];
 Uint8 debug_cur_color = 0, debug_cur_x=0, debug_cur_y = 0;
 
-char* cur_textinput;
-int cur_textinput_sz;
+int cur_textinput_enabled = 0;
+int cur_textinput_success = 0;
+char* cur_textinput = NULL;
+int cur_textinput_sz = 0;
 
 void put_pixel(unsigned x, unsigned y, uint32_t color) {
 	assert(x < 256);
@@ -142,13 +144,14 @@ int keys_size = 0;
 
 bool cc_held = 0;
 
+SDL_mutex   *event_lock;
+
 // Runs from emulation thread
 void handle_ui_keys() {
 	SDL_LockMutex(event_lock);
 
-	if (keys[SDL_SCANCODE_ESCAPE])
+	if ((!cur_textinput_enabled) &&(keys[SDL_SCANCODE_ESCAPE]) )
 		exit(0);
-
 
 	if (KEY_PRESSED(SDL_SCANCODE_F3)) {
 		corrupt_chance += 0x1000; printf("New corrupt chance is %u\n", corrupt_chance); }
@@ -165,7 +168,7 @@ void handle_ui_keys() {
 	else if (keys[SDL_SCANCODE_F8])
 		load_state();
 
-	handle_rewind(keys[SDL_SCANCODE_BACKSPACE]);
+	if (!cur_textinput_enabled) handle_rewind(keys[SDL_SCANCODE_BACKSPACE]);
 
 	if (reset_pushed)
 		soft_reset();
@@ -176,28 +179,40 @@ void handle_ui_keys() {
 
 static bool pending_sdl_thread_exit;
 
-// Protects the 'keys' array from being read while being updated
-SDL_mutex   *event_lock;
+SDL_mutex *prompt_mutex;
+SDL_cond   *prompt_cond;
 
 static void process_events() {
 	SDL_Event event;
 	SDL_LockMutex(event_lock);
 	while (SDL_PollEvent(&event)) {
-		if (event.type == SDL_WINDOWEVENT) {
+		switch(event.type) {
+
+			case SDL_WINDOWEVENT:
 
 			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
 
 				SDL_GetWindowSize(screen,&win_w,&win_h);
 				boxify();
 			}
-
-		} else if (event.type == SDL_QUIT) {
+			break;
+			case SDL_TEXTINPUT:
+				if (cur_textinput_enabled) {
+				if ((strlen(cur_textinput) + strlen(event.text.text)) < cur_textinput_sz) {
+					strcat(cur_textinput,event.text.text);
+					mvsdldbg_printf(3, 59, "%-117s", cur_textinput);
+				}
+				}
+			break;
+			case SDL_QUIT:
 			end_emulation();
 			pending_sdl_thread_exit = true;
 #ifdef RUN_TESTS
 			end_testing = true;
 #endif
+			break;
 		}
+
 	}
 	SDL_UnlockMutex(event_lock);
 }
@@ -365,7 +380,7 @@ void init_sdl() {
 	SDL_EventState(SDL_KEYUP          , SDL_IGNORE);
 	SDL_EventState(SDL_MOUSEBUTTONDOWN, SDL_IGNORE);
 	SDL_EventState(SDL_MOUSEBUTTONUP  , SDL_IGNORE);
-	SDL_EventState(SDL_KEYUP          , SDL_IGNORE);
+	//SDL_EventState(SDL_KEYUP          , SDL_IGNORE);
 	SDL_EventState(SDL_MOUSEMOTION    , SDL_IGNORE);
 
 	// Ignore window events for now
@@ -376,6 +391,24 @@ void init_sdl() {
 	keys = SDL_GetKeyboardState(&keys_size);
 	if (keys_size != oldksz) keys_lf = (Uint8*) realloc(keys_lf, keys_size * sizeof(Uint8));
 
+	if ((cur_textinput_enabled) && (KEY_PRESSED(SDLK_BACKSPACE))) {
+		cur_textinput[strlen(cur_textinput)] = 0;
+	}
+	if ((cur_textinput_enabled) && (KEY_PRESSED(SDLK_RETURN))) {
+		//SDL_LockMutex(prompt_mutex);
+		cur_textinput_enabled = 0;
+		cur_textinput_success = 1;
+		//SDL_CondSignal(prompt_cond);
+		//SDL_UnlockMutex(prompt_mutex);
+	}
+	if ((cur_textinput_enabled) && (KEY_PRESSED(SDLK_ESCAPE))) {
+		//SDL_LockMutex(prompt_mutex);
+		cur_textinput_enabled = 0;
+		cur_textinput_success = 0;
+		//SDL_CondSignal(prompt_cond);
+		//SDL_UnlockMutex(prompt_mutex);
+	}
+
 	// SDL thread synchronization
 
 	fail_if(!(event_lock = SDL_CreateMutex()),
@@ -383,6 +416,10 @@ void init_sdl() {
 
 	fail_if(!(frame_lock = SDL_CreateMutex()),
 			"failed to create frame mutex: %s", SDL_GetError());
+	fail_if(!(prompt_mutex = SDL_CreateMutex()),
+			"failed to create debug prompt mutex: %s", SDL_GetError());
+	fail_if(!(prompt_cond = SDL_CreateCond()),
+			"failed to create debug prompt condition variable: %s", SDL_GetError());
 	fail_if(!(frame_available_cond = SDL_CreateCond()),
 			"failed to create frame condition variable: %s", SDL_GetError());
 }
@@ -467,18 +504,30 @@ int mvsdldbg_printf(int x, int y, const char* format, ...) {
 
 int sdl_text_prompt(const char* prompt, char* value, int value_sz) {
 
-	int loop = 1;
-	
-	mvsdldbg_printf(0, 58, "%-120s");
-	mvsdldbg_printf(0, 59, " > ");
-	
-	cur_textinput = value;
-	cur_textinput_sz = value_sz;
+	show_debugger = 1;
 
-	SDL_StartTextInput();
+	mvsdldbg_printf(0, 58, "%-120s", prompt);
+	mvsdldbg_printf(0, 59, " > ");
+
+	char new_textinput[value_sz];
+	strcpy(new_textinput,value);
+
+	cur_textinput = new_textinput;
+	cur_textinput_sz = value_sz;
 	
+	cur_textinput_enabled = 1;
+	
+	SDL_StartTextInput();
+	//SDL_LockMutex(prompt_mutex);
+	while (cur_textinput_enabled) {
+
+		process_events();
+		//SDL_CondWait(prompt_cond,prompt_mutex);
+	
+	}
+	//SDL_UnlockMutex(prompt_mutex);
 	SDL_StopTextInput();
-	return 1;
+	return cur_textinput_success;
 }
 
 void deinit_sdl() {
@@ -489,6 +538,9 @@ void deinit_sdl() {
 
 	SDL_DestroyMutex(frame_lock);
 	SDL_DestroyCond(frame_available_cond);
+	
+	SDL_DestroyMutex(prompt_mutex);
+	SDL_DestroyCond(prompt_cond);
 
 	SDL_CloseAudioDevice(audio_device_id); // Prolly not needed, but play it safe
 	SDL_Quit();
