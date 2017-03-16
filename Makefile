@@ -12,7 +12,7 @@ ifeq ($(origin CC), default)
   CC              = gcc
 endif
 # Extra flags passed during compilation and linking
-EXTRA             :=  
+EXTRA             := -Wno-write-strings 
 EXTRA_LINK        := 
 # "debug", "release", or "release-debug". "release-debug" adds debugging
 # information in addition to optimizing.

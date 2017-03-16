@@ -1521,6 +1521,19 @@ needs_second_operand:
 }
 
 static void log_instruction() {
+
+	if ((debug_mode == SINGLE_STEP) || (frame_offset == 0)) {
+		//every frame, output new debugger values
+
+	mvsdldbg_printf(96, 0, "A: %02X", a);
+	mvsdldbg_printf(96, 1, "X: %02X", x);
+	mvsdldbg_printf(96, 2, "Y: %02X", y);
+	mvsdldbg_printf(96, 3, "S: %02X", s);
+
+        mvsdldbg_printf(96, 5, "%c%c%c%c%c%c",carry ? 'C' : 'c', !(zn & 0xFF) ? 'Z' : 'z', irq_disable ? 'I' : 'i', decimal ? 'D' : 'd', overflow ? 'V' : 'v', !!(zn & 0x180) ? 'N' : 'n');
+
+	}
+
     if (debug_mode == RUN) {
         if ((n_breakpoints_set > 0 && breakpoint_at[pc]) || keys[SDL_SCANCODE_F7])
             debug_mode = SINGLE_STEP;
@@ -1531,9 +1544,9 @@ static void log_instruction() {
     if (debug_mode == SINGLE_STEP || debug_mode == TRACE) {
         print_instruction(pc);
         printf("A: %02X  X: %02X  Y: %02X  S: %02X  "
-               "Carry: %d  Zero: %d  I disable: %d  Decimal: %d  Overflow: %d  Negative: %d  (%u,%u) PPU cycle: %"PRIu64,
+               "%c%c%c%c%c%c (%u,%u) PPU cycle: %"PRIu64,
                a, x, y, s,
-               carry, !(zn & 0xFF), irq_disable, decimal, overflow, !!(zn & 0x180),
+               carry ? 'C' : 'c', !(zn & 0xFF) ? 'Z' : 'z', irq_disable ? 'I' : 'i', decimal ? 'D' : 'd', overflow ? 'V' : 'v', !!(zn & 0x180) ? 'N' : 'n',
                scanline, dot, ppu_cycle);
 
         if (pending_nmi && pending_irq)
@@ -1557,6 +1570,7 @@ static void log_instruction() {
     static char const delims[] = " \f\t\v";
 
     for (;;) {
+        draw_frame();
         char *const line = readline("Debug: ");
         if (line) {
             if (!*line) return;

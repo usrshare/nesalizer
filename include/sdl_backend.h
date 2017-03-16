@@ -35,3 +35,11 @@ void handle_ui_keys();
 
 extern SDL_mutex *event_lock;
 extern Uint8 const *keys;
+
+int sdldbg_puts(const char* s);
+int mvsdldbg_puts(const char* s,const char x, const char y);
+int sdldbg_printf(const char* format, ...);
+int mvsdldbg_printf(int x, int y, const char* format, ...);
+
+extern Uint8 debug_contents[128*60];
+extern Uint8 debug_colors[128*60];
