@@ -41,6 +41,10 @@ int mvsdldbg_puts(const char x, const char y,const char* s);
 int sdldbg_printf(const char* format, ...);
 int mvsdldbg_printf(int x, int y, const char* format, ...);
 
+#define KM_SHIFT 128
+#define KM_CTRL 256
+#define KM_ALT 512
+
 int sdldbg_getchar(void);
 int sdl_text_prompt(const char* prompt, char* value, int value_sz);
 

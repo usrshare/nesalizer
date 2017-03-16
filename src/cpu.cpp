@@ -1626,7 +1626,7 @@ static void log_instruction() {
                     break;
                 }
 
-                case 'D':
+                case (KM_SHIFT | 'd'):
                     for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i) {
                         if (breakpoint_at[i]) {
                             printf("Deleted breakpoint at %04X\n", i);

@@ -531,8 +531,14 @@ int sdldbg_getchar(void) {
 		switch (event.type) {
 
 			case SDL_KEYDOWN:
+				if (event.key.keysym.sym < 128) {
 				keycode = event.key.keysym.sym;
+				int mods = SDL_GetModState();
+				if ((mods & KMOD_SHIFT)) keycode |= KM_SHIFT;
+				if ((mods & KMOD_CTRL)) keycode |= KM_CTRL;
+				if ((mods & KMOD_ALT)) keycode |= KM_ALT;
 				loop = 0;
+				}
 				break;
 			default:
 				process_events_sub(event);
