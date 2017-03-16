@@ -76,6 +76,26 @@ Uint8 debug_contents[128 * 60]; //640x480 / 5x8 font
 Uint8 debug_colors[128*60];
 Uint8 debug_cur_color = 0, debug_cur_x=0, debug_cur_y = 0;
 
+static const Uint32 dbgpal[16] = {
+	0xFFFFFF,
+	0xFF8888,
+	0xFFFF88,
+	0x88FF88,
+	0x88FFFF,
+	0x8888FF,
+	0xFF88FF,
+	0x888888,
+
+	0xFFFFFF,
+	0xFF0000,
+	0xFFFF00,
+	0x00FF00,
+	0x00FFFF,
+	0x0000FF,
+	0xFF00FF,
+	0x000000
+};
+
 void put_pixel(unsigned x, unsigned y, uint32_t color) {
 	assert(x < 256);
 	assert(y < 240);
@@ -253,6 +273,8 @@ void sdl_thread() {
 			SDL_Rect charrect; charrect.w = 5; charrect.h = 8;
 			SDL_Rect dbgrect; dbgrect.w = 5; dbgrect.h = 8;
 
+			int lastcolor = -1;
+
 			for (int iy=0; iy < 60; iy++) {
 				dbgrect.y = dstrect.y + (iy*8);
 				for (int ix=0; ix < 128; ix++) {
@@ -260,6 +282,13 @@ void sdl_thread() {
 					if (debug_contents[iy*128+ix] >= 32) {
 						charrect.x = ((debug_contents[iy*128+ix] - 32) % 16) * 5;
 						charrect.y = ((debug_contents[iy*128+ix] - 32) / 16) * 8;
+						if (debug_colors[iy*128+ix] != lastcolor) {
+
+							int curcol = debug_colors[iy*128+ix];
+
+							SDL_SetTextureColorMod(dbg_font, dbgpal[curcol] >> 16, (dbgpal[curcol] >> 8) & 0xFF, dbgpal[curcol] & 0xFF);
+							lastcolor = curcol;
+						}
 
 						fail_if(SDL_RenderCopy(renderer,dbg_font,&charrect,&dbgrect), "failed to draw debug character: %s",SDL_GetError());
 					}
@@ -430,7 +459,7 @@ int sdldbg_puts(const char* s) {
 	return 0;
 }
 
-int mvsdldbg_puts(const char* s,const char x, const char y) {
+int mvsdldbg_puts(const char x, const char y,const char* s) {
 	debug_cur_x = x; debug_cur_y = y;
 	return sdldbg_puts(s);
 }
@@ -486,7 +515,7 @@ int sdl_text_prompt(const char* prompt, char* value, int value_sz) {
 	memcpy(bk_colors, debug_colors + (128 * 58), (128*2));
 
 	mvsdldbg_printf(0, 58, "%-120s", prompt);
-	mvsdldbg_printf(0, 59, " > ");
+	mvsdldbg_puts(0, 59, " \xF3>\xF0 ");
 
 	char new_textinput[value_sz];
 	strcpy(new_textinput,value);
@@ -525,7 +554,7 @@ int sdl_text_prompt(const char* prompt, char* value, int value_sz) {
 
 			case SDL_TEXTINPUT:
 				//printf("got text input: %s\n",event.text.text);
-				if ((strlen(event.text.text) != 1) || (event.text.text[0] > 127)) break; //we do not accept unicode
+				if ((strlen(event.text.text) != 1) || (event.text.text[0] < 0)) break; //we do not accept unicode
 
 				if ((strlen(new_textinput) + strlen(event.text.text)) < value_sz) {
 					strcat(new_textinput,event.text.text);

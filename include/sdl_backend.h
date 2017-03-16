@@ -37,7 +37,7 @@ extern SDL_mutex *event_lock;
 extern Uint8 const *keys;
 
 int sdldbg_puts(const char* s);
-int mvsdldbg_puts(const char* s,const char x, const char y);
+int mvsdldbg_puts(const char x, const char y,const char* s);
 int sdldbg_printf(const char* format, ...);
 int mvsdldbg_printf(int x, int y, const char* format, ...);
 
