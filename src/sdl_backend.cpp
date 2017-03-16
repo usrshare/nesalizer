@@ -182,36 +182,34 @@ static bool pending_sdl_thread_exit;
 SDL_mutex *prompt_mutex;
 SDL_cond   *prompt_cond;
 
+static void process_events_sub(SDL_Event event) {
+		
+	switch(event.type) {
+
+			case SDL_WINDOWEVENT:
+
+				if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+
+					SDL_GetWindowSize(screen,&win_w,&win_h);
+					boxify();
+				}
+				break;
+			case SDL_QUIT:
+				end_emulation();
+				pending_sdl_thread_exit = true;
+#ifdef RUN_TESTS
+				end_testing = true;
+#endif
+				break;
+		}
+
+}
+
 static void process_events() {
 	SDL_Event event;
 	SDL_LockMutex(event_lock);
 	while (SDL_PollEvent(&event)) {
-		switch(event.type) {
-
-			case SDL_WINDOWEVENT:
-
-			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
-
-				SDL_GetWindowSize(screen,&win_w,&win_h);
-				boxify();
-			}
-			break;
-			case SDL_TEXTINPUT:
-				if (cur_textinput_enabled) {
-				if ((strlen(cur_textinput) + strlen(event.text.text)) < cur_textinput_sz) {
-					strcat(cur_textinput,event.text.text);
-					mvsdldbg_printf(3, 59, "%-117s", cur_textinput);
-				}
-				}
-			break;
-			case SDL_QUIT:
-			end_emulation();
-			pending_sdl_thread_exit = true;
-#ifdef RUN_TESTS
-			end_testing = true;
-#endif
-			break;
-		}
+		process_events_sub(event);
 
 	}
 	SDL_UnlockMutex(event_lock);
@@ -256,23 +254,23 @@ void sdl_thread() {
 			SDL_SetRenderDrawColor(renderer,0,0,0,128);
 			SDL_SetRenderDrawBlendMode(renderer,SDL_BLENDMODE_BLEND);
 			SDL_RenderFillRect(renderer, &dstrect);
-		
-		SDL_Rect charrect; charrect.w = 5; charrect.h = 8;
-		SDL_Rect dbgrect; dbgrect.w = 5; dbgrect.h = 8;
 
-		for (int iy=0; iy < 60; iy++) {
-			dbgrect.y = dstrect.y + (iy*8);
-			for (int ix=0; ix < 128; ix++) {
-				dbgrect.x = dstrect.x + (ix*5);
-				if (debug_contents[iy*128+ix] >= 32) {
-				charrect.x = ((debug_contents[iy*128+ix] - 32) % 16) * 5;
-				charrect.y = ((debug_contents[iy*128+ix] - 32) / 16) * 8;
-				
-				fail_if(SDL_RenderCopy(renderer,dbg_font,&charrect,&dbgrect), "failed to draw debug character: %s",SDL_GetError());
+			SDL_Rect charrect; charrect.w = 5; charrect.h = 8;
+			SDL_Rect dbgrect; dbgrect.w = 5; dbgrect.h = 8;
+
+			for (int iy=0; iy < 60; iy++) {
+				dbgrect.y = dstrect.y + (iy*8);
+				for (int ix=0; ix < 128; ix++) {
+					dbgrect.x = dstrect.x + (ix*5);
+					if (debug_contents[iy*128+ix] >= 32) {
+						charrect.x = ((debug_contents[iy*128+ix] - 32) % 16) * 5;
+						charrect.y = ((debug_contents[iy*128+ix] - 32) / 16) * 8;
+
+						fail_if(SDL_RenderCopy(renderer,dbg_font,&charrect,&dbgrect), "failed to draw debug character: %s",SDL_GetError());
+					}
 				}
 			}
-		}
-	
+
 
 		}
 		SDL_RenderPresent(renderer);
@@ -349,7 +347,7 @@ void init_sdl() {
 					SDL_TEXTUREACCESS_STREAMING,
 					280, 240)),
 			"failed to create texture for screen: %s", SDL_GetError());
-	
+
 	SDL_Surface* dbgfontsurf;
 	fail_if(!(dbgfontsurf = IMG_ReadXPMFromArray(dbgfont_xpm)),"failed to load debug font: %s", SDL_GetError());
 
@@ -359,7 +357,7 @@ void init_sdl() {
 	static Uint32 render_buffers[2][240*256];
 	back_buffer  = render_buffers[0];
 	front_buffer = render_buffers[1];
-	
+
 	// Audio
 
 	SDL_AudioSpec want;
@@ -392,19 +390,14 @@ void init_sdl() {
 	if (keys_size != oldksz) keys_lf = (Uint8*) realloc(keys_lf, keys_size * sizeof(Uint8));
 
 	if ((cur_textinput_enabled) && (KEY_PRESSED(SDLK_BACKSPACE))) {
-		cur_textinput[strlen(cur_textinput)] = 0;
 	}
 	if ((cur_textinput_enabled) && (KEY_PRESSED(SDLK_RETURN))) {
 		//SDL_LockMutex(prompt_mutex);
-		cur_textinput_enabled = 0;
-		cur_textinput_success = 1;
 		//SDL_CondSignal(prompt_cond);
 		//SDL_UnlockMutex(prompt_mutex);
 	}
 	if ((cur_textinput_enabled) && (KEY_PRESSED(SDLK_ESCAPE))) {
 		//SDL_LockMutex(prompt_mutex);
-		cur_textinput_enabled = 0;
-		cur_textinput_success = 0;
 		//SDL_CondSignal(prompt_cond);
 		//SDL_UnlockMutex(prompt_mutex);
 	}
@@ -515,18 +508,57 @@ int sdl_text_prompt(const char* prompt, char* value, int value_sz) {
 	cur_textinput = new_textinput;
 	cur_textinput_sz = value_sz;
 	
+	SDL_EventState(SDL_KEYDOWN        , SDL_ENABLE);
+	SDL_EventState(SDL_KEYUP          , SDL_ENABLE);
+
 	cur_textinput_enabled = 1;
-	
+
 	SDL_StartTextInput();
 	//SDL_LockMutex(prompt_mutex);
 	while (cur_textinput_enabled) {
 
+		SDL_Event event;
+
+		SDL_WaitEvent(&event);
+			switch (event.type) {
+
+				case SDL_KEYDOWN:
+					if (event.key.keysym.sym == SDLK_BACKSPACE) {
+						cur_textinput[strlen(cur_textinput)] = 0;
+					}
+					if (event.key.keysym.sym == SDLK_RETURN) {
+						cur_textinput_enabled = 0;
+						cur_textinput_success = 1;
+					}
+					if (event.key.keysym.sym == SDLK_ESCAPE) {
+						cur_textinput_enabled = 0;
+						cur_textinput_success = 0;
+					}
+
+					break;
+
+				case SDL_TEXTINPUT:
+					if (cur_textinput_enabled) {
+						if ((strlen(cur_textinput) + strlen(event.text.text)) < cur_textinput_sz) {
+							strcat(cur_textinput,event.text.text);
+							mvsdldbg_printf(3, 59, "%-117s", cur_textinput);
+						}
+					}
+					break;
+				default:
+					process_events_sub(event);
+
+					break;
+			}
+		draw_frame();
 		process_events();
 		//SDL_CondWait(prompt_cond,prompt_mutex);
-	
+
 	}
 	//SDL_UnlockMutex(prompt_mutex);
 	SDL_StopTextInput();
+	SDL_EventState(SDL_KEYDOWN        , SDL_IGNORE);
+	SDL_EventState(SDL_KEYUP          , SDL_IGNORE);
 	return cur_textinput_success;
 }
 
@@ -538,7 +570,7 @@ void deinit_sdl() {
 
 	SDL_DestroyMutex(frame_lock);
 	SDL_DestroyCond(frame_available_cond);
-	
+
 	SDL_DestroyMutex(prompt_mutex);
 	SDL_DestroyCond(prompt_cond);
 
