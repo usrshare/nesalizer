@@ -76,6 +76,9 @@ Uint8 debug_contents[128 * 60]; //640x480 / 5x8 font
 Uint8 debug_colors[128*60];
 Uint8 debug_cur_color = 0, debug_cur_x=0, debug_cur_y = 0;
 
+char* cur_textinput;
+int cur_textinput_sz;
+
 void put_pixel(unsigned x, unsigned y, uint32_t color) {
 	assert(x < 256);
 	assert(y < 240);
@@ -185,7 +188,7 @@ static void process_events() {
 			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
 
 				SDL_GetWindowSize(screen,&win_w,&win_h);
-				viewport = boxify();
+				boxify();
 			}
 
 		} else if (event.type == SDL_QUIT) {
@@ -243,9 +246,9 @@ void sdl_thread() {
 		SDL_Rect dbgrect; dbgrect.w = 5; dbgrect.h = 8;
 
 		for (int iy=0; iy < 60; iy++) {
-			dbgrect.y = iy*8;
+			dbgrect.y = dstrect.y + (iy*8);
 			for (int ix=0; ix < 128; ix++) {
-				dbgrect.x = ix*5;
+				dbgrect.x = dstrect.x + (ix*5);
 				if (debug_contents[iy*128+ix] >= 32) {
 				charrect.x = ((debug_contents[iy*128+ix] - 32) % 16) * 5;
 				charrect.y = ((debug_contents[iy*128+ix] - 32) / 16) * 8;
@@ -462,8 +465,20 @@ int mvsdldbg_printf(int x, int y, const char* format, ...) {
 	return r;
 }
 
-int sdl_text_prompt(const char* prompt, char* value, size_t value_sz) {
+int sdl_text_prompt(const char* prompt, char* value, int value_sz) {
 
+	int loop = 1;
+	
+	mvsdldbg_printf(0, 58, "%-120s");
+	mvsdldbg_printf(0, 59, " > ");
+	
+	cur_textinput = value;
+	cur_textinput_sz = value_sz;
+
+	SDL_StartTextInput();
+	
+	SDL_StopTextInput();
+	return 1;
 }
 
 void deinit_sdl() {
