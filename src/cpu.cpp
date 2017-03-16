@@ -1528,6 +1528,17 @@ static void log_instruction() {
 
         mvsdldbg_printf(96, 5, "%c%c%c%c%c%c",carry ? 'C' : 'c', !(zn & 0xFF) ? 'Z' : 'z', irq_disable ? 'I' : 'i', decimal ? 'D' : 'd', overflow ? 'V' : 'v', !!(zn & 0x180) ? 'N' : 'n');
 
+	//print zeropage
+	for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(72 - 3, 30 + iy, "\xF1%01Xx", iy);
+	for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(72 + (3*ix), 30 - 1, "\xF5x%01X", ix );
+
+	for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(72 + (3*ix), 30 + 16, "\xF5x%01X", ix );
+	for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(72 + (16*3), 30 + iy, "\xF1%01Xx", iy);
+
+	for (int iy = 0; iy < 16; iy++)
+		for (int ix = 0; ix < 16; ix++)
+			mvsdldbg_printf(72 + (3*ix), 30 + iy, "%c%02X", ((ix+iy)%2 ? 0xF3 : 0xF4) , ram[iy * 16 + ix] );
+
 	}
 
     if (debug_mode == RUN) {
@@ -1539,11 +1550,6 @@ static void log_instruction() {
 
     if (debug_mode == SINGLE_STEP || debug_mode == TRACE) {
         print_instruction(pc);
-        printf("A: %02X  X: %02X  Y: %02X  S: %02X  "
-               "%c%c%c%c%c%c (%u,%u) PPU cycle: %"PRIu64,
-               a, x, y, s,
-               carry ? 'C' : 'c', !(zn & 0xFF) ? 'Z' : 'z', irq_disable ? 'I' : 'i', decimal ? 'D' : 'd', overflow ? 'V' : 'v', !!(zn & 0x180) ? 'N' : 'n',
-               scanline, dot, ppu_cycle);
 
         if (pending_nmi && pending_irq)
             puts(" (pending NMI and IRQ)");
@@ -1563,22 +1569,16 @@ static void log_instruction() {
     // Prevent audio underflow while running debugger
     stop_audio_playback();
 
-    static char const delims[] = " \f\t\v";
-
     for (;;) {
         draw_frame();
-	char line[80];
-       	int l = sdl_text_prompt("Debug:", line, 80);	
-        if (l) {
-            if (!(line[0])) return;
-
-            char *const keyword = strtok(line, delims);
-            if (keyword) {
-                char *const arg = strtok(0, delims);
-                switch (*keyword) {
-                case 'b':
+	char arg[80];
+       	int keycode = sdldbg_getchar();
+	//int l = sdl_text_prompt("Debug:", line, 80);
+	//
+	switch(keycode) {
+		case 'b':
                 {
-                    if (!arg) {
+		    if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
                         puts("Missing address");
                         break;
                     }
@@ -1608,7 +1608,7 @@ static void log_instruction() {
 
                 case 'd':
                 {
-                    if (!arg) {
+		    if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
                         puts("Missing address");
                         break;
                     }
@@ -1648,11 +1648,9 @@ static void log_instruction() {
                     return;
 
                 default:
-                    printf("Unknown command '%c'\n", *keyword);
+                    printf("Unknown command '%c'\n", keycode);
                     break;
-                }
-            }
-        }
+	}
     }
 }
 #endif // INCLUDE_DEBUGGER

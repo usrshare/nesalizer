@@ -506,6 +506,47 @@ int mvsdldbg_printf(int x, int y, const char* format, ...) {
 	return r;
 }
 
+int sdldbg_getchar(void) {
+
+	show_debugger = 1;
+
+	Uint8 bk_contents[128], bk_colors[128];
+	memcpy(bk_contents, debug_contents + (128 * 59), 128);
+	memcpy(bk_colors, debug_colors + (128 * 59), 128);
+
+	mvsdldbg_puts(0, 59, " \xF1?\xF0 ");
+
+	int keycode = 0;
+	
+	SDL_EventState(SDL_KEYDOWN, SDL_ENABLE);
+
+	bool loop = 1;
+
+	while (loop) {
+
+		draw_frame();
+
+		SDL_Event event;
+		SDL_WaitEvent(&event);
+		switch (event.type) {
+
+			case SDL_KEYDOWN:
+				keycode = event.key.keysym.sym;
+				loop = 0;
+				break;
+			default:
+				process_events_sub(event);
+				break;
+		}
+	}
+
+	SDL_EventState(SDL_KEYDOWN, SDL_IGNORE);
+
+	memcpy(debug_contents + (128 * 59), bk_contents, 128);
+	memcpy(debug_colors + (128 * 59), bk_colors, 128);
+	return keycode;
+}
+
 int sdl_text_prompt(const char* prompt, char* value, int value_sz) {
 
 	show_debugger = 1;

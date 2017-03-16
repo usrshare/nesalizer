@@ -41,6 +41,7 @@ int mvsdldbg_puts(const char x, const char y,const char* s);
 int sdldbg_printf(const char* format, ...);
 int mvsdldbg_printf(int x, int y, const char* format, ...);
 
+int sdldbg_getchar(void);
 int sdl_text_prompt(const char* prompt, char* value, int value_sz);
 
 extern Uint8 debug_contents[128*60];
