@@ -18,9 +18,6 @@ EXTRA_LINK        :=
 # "debug", "release", or "release-debug". "release-debug" adds debugging
 # information in addition to optimizing.
 CONF              := release-debug
-# If "1", includes a simple debugger (see cpu.cpp) for internal use. Has
-# readline dependency.
-INCLUDE_DEBUGGER  := 1
 # If "1", a movie is recorded to movie.mp4 using libav (movie.cpp)
 RECORD_MOVIE      = 0
 # If "1", passes -rdynamic to add symbols for backtraces
@@ -60,10 +57,6 @@ objects     = $(c_objects) $(cpp_objects)
 deps        = $(addprefix $(BUILD_DIR)/,$(c_sources:=.d) $(cpp_sources:=.d))
 
 LDLIBS := $(shell sdl2-config --libs) -lSDL2_image -lrt
-
-ifeq ($(INCLUDE_DEBUGGER),1)
-    LDLIBS += -lreadline
-endif
 
 ifeq ($(RECORD_MOVIE),1)
     LDLIBS += -lavcodec -lavformat -lavutil -lswscale
@@ -118,10 +111,6 @@ endif
 ifeq ($(BACKTRACE_SUPPORT),1)
     # No -rdynamic support in older Clang versions. This is equivalent.
     link_flags += -Wl,-export-dynamic
-endif
-
-ifeq ($(INCLUDE_DEBUGGER),1)
-    compile_flags += -DINCLUDE_DEBUGGER
 endif
 
 ifeq ($(RECORD_MOVIE),1)

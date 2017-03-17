@@ -101,15 +101,128 @@ int reset_debugger(void) {
     return 0;
 }
 
+int instr_length(int opcode) {
+    switch (opcode) {
+    // Implied
+    case BRK: case RTI: case RTS: case PHA: case PHP:
+    case PLA: case PLP: case CLC: case CLD: case CLI:
+    case CLV: case SEC: case SED: case SEI: case DEX:
+    case DEY: case INX: case INY: case NO0: case NO1:
+    case NO2: case NO3: case NO4: case NO5: case NOP:
+    case TAX: case TAY: case TSX: case TXA: case TXS:
+    case TYA:
+
+    // KIL instructions implied_:
+    case KI0: case KI1: case KI2: case KI3: case KI4:
+    case KI5: case KI6: case KI7: case KI8: case KI9:
+    case K10: case K11:
+
+    // Accumulator
+    case ASL_ACC: case LSR_ACC: case ROL_ACC: case ROR_ACC:
+
+    return 1;
+
+    // Immediate
+    case ADC_IMM: case ALR_IMM: case AN0_IMM: case AN1_IMM: case AND_IMM:
+    case ARR_IMM: case AXS_IMM: case ATX_IMM: case CMP_IMM: case CPX_IMM:
+    case CPY_IMM: case EOR_IMM: case LDA_IMM: case LDX_IMM: case LDY_IMM:
+    case NO0_IMM: case NO1_IMM: case NO2_IMM: case NO3_IMM: case NO4_IMM:
+    case ORA_IMM: case SB2_IMM: case SBC_IMM: case XAA_IMM:
+
+    // Zero page
+    case ADC_ZERO: case AND_ZERO: case BIT_ZERO: case CMP_ZERO:
+    case CPX_ZERO: case CPY_ZERO: case DCP_ZERO: case EOR_ZERO:
+    case ISC_ZERO: case LAX_ZERO: case LDA_ZERO: case LDX_ZERO:
+    case LDY_ZERO: case NO0_ZERO: case NO1_ZERO: case NO2_ZERO:
+    case ORA_ZERO: case SBC_ZERO: case SLO_ZERO: case SRE_ZERO:
+    case SAX_ZERO: case ASL_ZERO: case LSR_ZERO: case RLA_ZERO:
+    case RRA_ZERO: case ROL_ZERO: case ROR_ZERO: case INC_ZERO:
+    case DEC_ZERO: case STA_ZERO: case STX_ZERO: case STY_ZERO:
+
+    // Zero page, X
+    case ADC_ZERO_X: case AND_ZERO_X: case CMP_ZERO_X: case DCP_ZERO_X:
+    case EOR_ZERO_X: case ISC_ZERO_X: case LDA_ZERO_X: case LDY_ZERO_X:
+    case NO0_ZERO_X: case NO1_ZERO_X: case NO2_ZERO_X: case NO3_ZERO_X:
+    case NO4_ZERO_X: case NO5_ZERO_X: case ORA_ZERO_X: case SBC_ZERO_X:
+    case SLO_ZERO_X: case SRE_ZERO_X: case ASL_ZERO_X: case DEC_ZERO_X:
+    case INC_ZERO_X: case LSR_ZERO_X: case RLA_ZERO_X: case RRA_ZERO_X:
+    case ROL_ZERO_X: case ROR_ZERO_X: case STA_ZERO_X: case STY_ZERO_X:
+
+    // Zero page, Y
+    case SAX_ZERO_Y: case LAX_ZERO_Y: case LDX_ZERO_Y: case STX_ZERO_Y:
+
+    // Relative branch_ instructions:
+    case BCC: case BCS: case BVC: case BVS: case BEQ:
+    case BMI: case BNE: case BPL:
+
+    // Indirect_,X:
+    case ADC_IND_X: case AND_IND_X: case CMP_IND_X: case DCP_IND_X:
+    case EOR_IND_X: case ISC_IND_X: case LAX_IND_X: case LDA_IND_X:
+    case ORA_IND_X: case RLA_IND_X: case RRA_IND_X: case SAX_IND_X:
+    case SBC_IND_X: case SLO_IND_X: case SRE_IND_X: case STA_IND_X:
+
+    // Indirect_:,Y
+    case ADC_IND_Y: case AND_IND_Y: case AXA_IND_Y: case CMP_IND_Y:
+    case DCP_IND_Y: case EOR_IND_Y: case ISC_IND_Y: case LAX_IND_Y:
+    case LDA_IND_Y: case ORA_IND_Y: case RLA_IND_Y: case RRA_IND_Y:
+    case SBC_IND_Y: case SLO_IND_Y: case SRE_IND_Y: case STA_IND_Y:
+    
+    return 2;
+    break;
+    
+    // Absolute
+    case JMP_ABS: case JSR_ABS: case ADC_ABS: case AND_ABS: case BIT_ABS:
+    case CMP_ABS: case CPX_ABS: case CPY_ABS: case DCP_ABS: case EOR_ABS:
+    case ISC_ABS: case LAX_ABS: case LDA_ABS: case LDX_ABS: case LDY_ABS:
+    case NOP_ABS: case ORA_ABS: case SBC_ABS: case SLO_ABS: case SRE_ABS:
+    case ASL_ABS: case DEC_ABS: case INC_ABS: case LSR_ABS: case RLA_ABS:
+    case RRA_ABS: case ROL_ABS: case ROR_ABS: case SAX_ABS: case STA_ABS:
+    case STX_ABS: case STY_ABS:
+
+    // Absolute,X
+    case ADC_ABS_X: case AND_ABS_X: case CMP_ABS_X: case DCP_ABS_X:
+    case EOR_ABS_X: case ISC_ABS_X: case LDA_ABS_X: case LDY_ABS_X:
+    case NO0_ABS_X: case NO1_ABS_X: case NO2_ABS_X: case NO3_ABS_X:
+    case NO4_ABS_X: case NO5_ABS_X: case ORA_ABS_X: case RLA_ABS_X:
+    case RRA_ABS_X: case SAY_ABS_X: case SBC_ABS_X: case SLO_ABS_X:
+    case SRE_ABS_X: case ASL_ABS_X: case DEC_ABS_X: case INC_ABS_X:
+    case LSR_ABS_X: case ROL_ABS_X: case ROR_ABS_X: case STA_ABS_X:
+
+    // Absolute,Y
+    case ADC_ABS_Y: case AND_ABS_Y: case AXA_ABS_Y: case CMP_ABS_Y:
+    case DCP_ABS_Y: case EOR_ABS_Y: case ISC_ABS_Y: case LAX_ABS_Y:
+    case LAS_ABS_Y: case LDA_ABS_Y: case LDX_ABS_Y: case ORA_ABS_Y:
+    case RLA_ABS_Y: case RRA_ABS_Y: case SBC_ABS_Y: case SLO_ABS_Y:
+    case SRE_ABS_Y: case STA_ABS_Y: case TAS_ABS_Y: case XAS_ABS_Y:
+
+    // Indirect
+    case JMP_IND:
+
+    return 3;
+    break;
+    default: return 1;
+    }
+}
+
 static void print_instruction(uint16_t addr) {
     int opcode, op_1, op_2;
-
 
     sdldbg_printf("\361%c\365%04X: \360", (addr == pc) ? '>' : ' ' , addr);
 
     if ((opcode = read_without_side_effects(addr)) == -1) {
         sdldbg_puts("(strange address while reading opcode - skipping)\n");
         return;
+    }
+
+    int ol = instr_length(opcode);
+
+    if (addr == cursor_cpu) sdldbg_puts("\363"); else sdldbg_puts("\360");
+
+    for (int i=0; i < 3; i++) {
+	    if (i < ol) 
+		    sdldbg_printf("%02X ",read_without_side_effects(addr+i));
+	    else
+		    sdldbg_puts("   ");
     }
 
     switch (opcode) {
@@ -227,109 +340,6 @@ needs_second_operand:
     INS_IND(JMP)
 
     default: UNREACHABLE
-    }
-}
-
-int instr_length(int opcode) {
-    switch (opcode) {
-    // Implied
-    case BRK: case RTI: case RTS: case PHA: case PHP:
-    case PLA: case PLP: case CLC: case CLD: case CLI:
-    case CLV: case SEC: case SED: case SEI: case DEX:
-    case DEY: case INX: case INY: case NO0: case NO1:
-    case NO2: case NO3: case NO4: case NO5: case NOP:
-    case TAX: case TAY: case TSX: case TXA: case TXS:
-    case TYA:
-
-    // KIL instructions implied_:
-    case KI0: case KI1: case KI2: case KI3: case KI4:
-    case KI5: case KI6: case KI7: case KI8: case KI9:
-    case K10: case K11:
-
-    // Accumulator
-    case ASL_ACC: case LSR_ACC: case ROL_ACC: case ROR_ACC:
-
-    return 1;
-
-    // Immediate
-    case ADC_IMM: case ALR_IMM: case AN0_IMM: case AN1_IMM: case AND_IMM:
-    case ARR_IMM: case AXS_IMM: case ATX_IMM: case CMP_IMM: case CPX_IMM:
-    case CPY_IMM: case EOR_IMM: case LDA_IMM: case LDX_IMM: case LDY_IMM:
-    case NO0_IMM: case NO1_IMM: case NO2_IMM: case NO3_IMM: case NO4_IMM:
-    case ORA_IMM: case SB2_IMM: case SBC_IMM: case XAA_IMM:
-
-    // Zero page
-    case ADC_ZERO: case AND_ZERO: case BIT_ZERO: case CMP_ZERO:
-    case CPX_ZERO: case CPY_ZERO: case DCP_ZERO: case EOR_ZERO:
-    case ISC_ZERO: case LAX_ZERO: case LDA_ZERO: case LDX_ZERO:
-    case LDY_ZERO: case NO0_ZERO: case NO1_ZERO: case NO2_ZERO:
-    case ORA_ZERO: case SBC_ZERO: case SLO_ZERO: case SRE_ZERO:
-    case SAX_ZERO: case ASL_ZERO: case LSR_ZERO: case RLA_ZERO:
-    case RRA_ZERO: case ROL_ZERO: case ROR_ZERO: case INC_ZERO:
-    case DEC_ZERO: case STA_ZERO: case STX_ZERO: case STY_ZERO:
-
-    // Zero page, X
-    case ADC_ZERO_X: case AND_ZERO_X: case CMP_ZERO_X: case DCP_ZERO_X:
-    case EOR_ZERO_X: case ISC_ZERO_X: case LDA_ZERO_X: case LDY_ZERO_X:
-    case NO0_ZERO_X: case NO1_ZERO_X: case NO2_ZERO_X: case NO3_ZERO_X:
-    case NO4_ZERO_X: case NO5_ZERO_X: case ORA_ZERO_X: case SBC_ZERO_X:
-    case SLO_ZERO_X: case SRE_ZERO_X: case ASL_ZERO_X: case DEC_ZERO_X:
-    case INC_ZERO_X: case LSR_ZERO_X: case RLA_ZERO_X: case RRA_ZERO_X:
-    case ROL_ZERO_X: case ROR_ZERO_X: case STA_ZERO_X: case STY_ZERO_X:
-
-    // Zero page, Y
-    case SAX_ZERO_Y: case LAX_ZERO_Y: case LDX_ZERO_Y: case STX_ZERO_Y:
-
-    // Relative branch_ instructions:
-    case BCC: case BCS: case BVC: case BVS: case BEQ:
-    case BMI: case BNE: case BPL:
-
-    // Indirect_,X:
-    case ADC_IND_X: case AND_IND_X: case CMP_IND_X: case DCP_IND_X:
-    case EOR_IND_X: case ISC_IND_X: case LAX_IND_X: case LDA_IND_X:
-    case ORA_IND_X: case RLA_IND_X: case RRA_IND_X: case SAX_IND_X:
-    case SBC_IND_X: case SLO_IND_X: case SRE_IND_X: case STA_IND_X:
-
-    // Indirect_:,Y
-    case ADC_IND_Y: case AND_IND_Y: case AXA_IND_Y: case CMP_IND_Y:
-    case DCP_IND_Y: case EOR_IND_Y: case ISC_IND_Y: case LAX_IND_Y:
-    case LDA_IND_Y: case ORA_IND_Y: case RLA_IND_Y: case RRA_IND_Y:
-    case SBC_IND_Y: case SLO_IND_Y: case SRE_IND_Y: case STA_IND_Y:
-    
-    return 2;
-    break;
-    
-    // Absolute
-    case JMP_ABS: case JSR_ABS: case ADC_ABS: case AND_ABS: case BIT_ABS:
-    case CMP_ABS: case CPX_ABS: case CPY_ABS: case DCP_ABS: case EOR_ABS:
-    case ISC_ABS: case LAX_ABS: case LDA_ABS: case LDX_ABS: case LDY_ABS:
-    case NOP_ABS: case ORA_ABS: case SBC_ABS: case SLO_ABS: case SRE_ABS:
-    case ASL_ABS: case DEC_ABS: case INC_ABS: case LSR_ABS: case RLA_ABS:
-    case RRA_ABS: case ROL_ABS: case ROR_ABS: case SAX_ABS: case STA_ABS:
-    case STX_ABS: case STY_ABS:
-
-    // Absolute,X
-    case ADC_ABS_X: case AND_ABS_X: case CMP_ABS_X: case DCP_ABS_X:
-    case EOR_ABS_X: case ISC_ABS_X: case LDA_ABS_X: case LDY_ABS_X:
-    case NO0_ABS_X: case NO1_ABS_X: case NO2_ABS_X: case NO3_ABS_X:
-    case NO4_ABS_X: case NO5_ABS_X: case ORA_ABS_X: case RLA_ABS_X:
-    case RRA_ABS_X: case SAY_ABS_X: case SBC_ABS_X: case SLO_ABS_X:
-    case SRE_ABS_X: case ASL_ABS_X: case DEC_ABS_X: case INC_ABS_X:
-    case LSR_ABS_X: case ROL_ABS_X: case ROR_ABS_X: case STA_ABS_X:
-
-    // Absolute,Y
-    case ADC_ABS_Y: case AND_ABS_Y: case AXA_ABS_Y: case CMP_ABS_Y:
-    case DCP_ABS_Y: case EOR_ABS_Y: case ISC_ABS_Y: case LAX_ABS_Y:
-    case LAS_ABS_Y: case LDA_ABS_Y: case LDX_ABS_Y: case ORA_ABS_Y:
-    case RLA_ABS_Y: case RRA_ABS_Y: case SBC_ABS_Y: case SLO_ABS_Y:
-    case SRE_ABS_Y: case STA_ABS_Y: case TAS_ABS_Y: case XAS_ABS_Y:
-
-    // Indirect
-    case JMP_IND:
-
-    return 3;
-    break;
-    default: return 1;
     }
 }
 

@@ -848,9 +848,7 @@ void run() {
                 break;
         }
 
-#ifdef INCLUDE_DEBUGGER
         dbg_log_instruction();
-#endif
 
         uint8_t const opcode = read_mem(pc++);
         if (polls_irq_after_first_cycle[opcode])
