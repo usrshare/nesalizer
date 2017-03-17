@@ -402,8 +402,6 @@ void init_sdl() {
 	// Input
 
 	// We use SDL_GetKey/MouseState() instead
-	SDL_EventState(SDL_KEYDOWN        , SDL_IGNORE);
-	SDL_EventState(SDL_KEYUP          , SDL_IGNORE);
 	SDL_EventState(SDL_MOUSEBUTTONDOWN, SDL_IGNORE);
 	SDL_EventState(SDL_MOUSEBUTTONUP  , SDL_IGNORE);
 	//SDL_EventState(SDL_KEYUP          , SDL_IGNORE);
@@ -523,6 +521,30 @@ int sdldbg_move(int x, int y) {
 	return 0;
 }
 
+int sdldbg_getkey_nonblock(void) {
+
+	int keycode = 0;
+
+	SDL_Event event;
+	SDL_PollEvent(&event);
+	switch (event.type) {
+
+		case SDL_KEYDOWN:
+			if (event.key.keysym.sym < 128) {
+				keycode = event.key.keysym.sym;
+				int mods = SDL_GetModState();
+				if ((mods & KMOD_SHIFT)) keycode |= KM_SHIFT;
+				if ((mods & KMOD_CTRL)) keycode |= KM_CTRL;
+				if ((mods & KMOD_ALT)) keycode |= KM_ALT;
+			}
+			break;
+		default:
+			process_events_sub(event);
+			break;
+	}
+	return keycode;
+}
+
 int sdldbg_getkey(void) {
 
 	show_debugger = 1;
@@ -534,7 +556,7 @@ int sdldbg_getkey(void) {
 	mvsdldbg_puts(0, 59, " \xF1?\xF0 ");
 
 	int keycode = 0;
-	
+
 	SDL_EventState(SDL_KEYDOWN, SDL_ENABLE);
 
 	bool loop = 1;
@@ -549,12 +571,12 @@ int sdldbg_getkey(void) {
 
 			case SDL_KEYDOWN:
 				if (event.key.keysym.sym < 128) {
-				keycode = event.key.keysym.sym;
-				int mods = SDL_GetModState();
-				if ((mods & KMOD_SHIFT)) keycode |= KM_SHIFT;
-				if ((mods & KMOD_CTRL)) keycode |= KM_CTRL;
-				if ((mods & KMOD_ALT)) keycode |= KM_ALT;
-				loop = 0;
+					keycode = event.key.keysym.sym;
+					int mods = SDL_GetModState();
+					if ((mods & KMOD_SHIFT)) keycode |= KM_SHIFT;
+					if ((mods & KMOD_CTRL)) keycode |= KM_CTRL;
+					if ((mods & KMOD_ALT)) keycode |= KM_ALT;
+					loop = 0;
 				}
 				break;
 			default:
@@ -635,7 +657,7 @@ int sdl_text_prompt(const char* prompt, char* value, int value_sz) {
 	SDL_StopTextInput();
 	SDL_EventState(SDL_KEYDOWN        , SDL_IGNORE);
 	SDL_EventState(SDL_KEYUP          , SDL_IGNORE);
-	
+
 	if (success) strncpy(value,new_textinput,value_sz);
 
 	memcpy(debug_contents + (128 * 58),bk_contents, (128*2));
