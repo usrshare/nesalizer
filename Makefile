@@ -88,7 +88,7 @@ endif
 # Configuration
 #
 
-ifeq ($(filter debug release release-debug,$(CONF)),)
+ifeq ($(filter debug release release-debug debug-prof release-prof release-debug-prof,$(CONF)),)
     $(error unknown configuration "$(CONF)")
 else ifneq ($(MAKECMDGOALS),clean)
     # make will restart after updating the .d dependency files, so make sure we
@@ -98,8 +98,12 @@ else ifneq ($(MAKECMDGOALS),clean)
     endif
 endif
 
+ifneq ($(findstring prof,$(CONF)),)
+    compile_flags += -pg
+    link_flags += -pg
+endif
 ifneq ($(findstring debug,$(CONF)),)
-    compile_flags += -ggdb
+    compile_flags += -g
 endif
 ifneq ($(findstring release,$(CONF)),)
     # Including -Ofast when linking (by including $(optimizations)) gives a

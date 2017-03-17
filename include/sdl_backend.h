@@ -43,11 +43,13 @@ int sdldbg_printf(const char* format, ...);
 int mvsdldbg_printf(int x, int y, const char* format, ...);
 int sdldbg_move(int x, int y);
 int sdldbg_clear(int width, int height);
+int mvsdldbg_clear(int x, int y, int width, int height);
 #define KM_SHIFT 128
 #define KM_CTRL 256
 #define KM_ALT 512
 
 int sdldbg_getkey(void);
+int sdldbg_getkey_nonblock(void);
 int sdl_text_prompt(const char* prompt, char* value, size_t value_sz);
 
 extern Uint8 debug_contents[128*60];

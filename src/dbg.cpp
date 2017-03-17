@@ -5,7 +5,7 @@
 #include "mapper.h"
 #include "sdl_backend.h"
 
-static enum { RUN, SINGLE_STEP, TRACE } debug_mode;// = SINGLE_STEP;
+static enum { RUN, SINGLE_STEP, TRACE, NEXT_STEP } debug_mode;// = SINGLE_STEP;
 static int cursor_cpu = -1;
 static int cursor_ram = 0;
 
@@ -204,7 +204,11 @@ int instr_length(int opcode) {
 static void print_instruction(uint16_t addr) {
 	int opcode, op_1, op_2;
 
-	sdldbg_printf("\361%c\365%04X: \360", (addr == pc) ? '>' : ' ' , addr);
+	if (breakpoint_at[addr]) {
+		sdldbg_printf("\361%c\361%04X: \360", (addr == pc) ? '#' : '*' , addr);
+	} else {
+		sdldbg_printf("\361%c\365%04X: \360", (addr == pc) ? '>' : ' ' , addr);
+	}
 
 	if ((opcode = read_without_side_effects(addr)) == -1) {
 		sdldbg_puts("(strange address while reading opcode - skipping)\n");
@@ -383,11 +387,29 @@ int find_forward(int addr, int* instr_c) {
 	return test_addr;
 }
 
-void dbg_kbdinput_cb(bool keystate, int keycode) {
+int kbdinput_ign = 0;
 
-	if (!keystate) return;
+static int breakpoint_set (uint16_t addr) {
+	n_breakpoints_set += !breakpoint_at[addr];
+	breakpoint_at[addr] = true;
+	return 0;
+}
 
+static int breakpoint_remove (uint16_t addr) {
+	n_breakpoints_set -= breakpoint_at[addr];
+	if (!breakpoint_at[addr]) return 1;
+	breakpoint_at[addr] = false;
+	return 0;
+}
+
+static int breakpoint_toggle (uint16_t addr) {
+	return breakpoint_at[addr] ? breakpoint_remove(addr) : breakpoint_set(addr);
+}
+
+static void dbg_kbdinput(int keycode) {
 	char arg[80];
+	memset(arg,0,80);
+
 	switch(keycode) {
 
 		case SDLK_UP: {
@@ -420,88 +442,84 @@ void dbg_kbdinput_cb(bool keystate, int keycode) {
 					  else cursor_cpu = addr;
 				  }
 				  break;
-
+		case 's':	{
+					debug_mode = NEXT_STEP;
+				}
+				break;
+		case (KM_SHIFT | 's'):	{
+					// "step over" by installing a breakpoint on the instruction
+					// next to the one at PC
+					if (debug_mode == SINGLE_STEP) debug_mode = RUN;
+					int f=1;
+					breakpoint_set(find_forward(pc,&f));
+				}
+					break;
 		case 'b':
-				  {
-					  if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
-						  puts("Missing address");
-						  break;
-					  }
-					  unsigned addr;
-					  sscanf(arg, "%x", &addr);
-					  if (addr > 0xFFFF)
-						  puts("Address out of range");
-					  else {
-						  // Increment if setting and cleared
-						  n_breakpoints_set += !breakpoint_at[addr];
-						  breakpoint_at[addr] = true;
-					  }
-					  break;
-				  }
+				{
+					if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
+						puts("Missing address");
+						break;
+					}
+					unsigned addr;
+					sscanf(arg, "%x", &addr);
+					breakpoint_set(addr);
+					break;
+				}
 
-		case 'c':
-				  debug_mode = RUN;
-				  // Process input events to avoid another <F8> being
-				  // detected immediately
-				  SDL_LockMutex(event_lock);
-				  SDL_PumpEvents();
-				  SDL_UnlockMutex(event_lock);
-				  return;
-
+				break;
 		case 'd':
-				  {
-					  if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
-						  puts("Missing address");
-						  break;
-					  }
-					  unsigned addr;
-					  sscanf(arg, "%x", &addr);
-					  if (addr > 0xFFFF)
-						  puts("Address out of range");
-					  else {
-						  // Decrement if clearing and set
-						  n_breakpoints_set -= breakpoint_at[addr];
-						  if (!breakpoint_at[addr])
-							  puts("No breakpoint at address");
-						  breakpoint_at[addr] = false;
-					  }
-					  break;
-				  }
-
+				{
+					if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
+						puts("Missing address");
+						break;
+					}
+					unsigned addr;
+					sscanf(arg, "%x", &addr);
+					breakpoint_remove(addr);
+					break;
+				}
+		case ' ':
+				{
+					breakpoint_toggle(cursor_cpu);
+				}
+				break;
 		case (KM_SHIFT | 'd'):
-				  for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i) {
-					  if (breakpoint_at[i]) {
-						  printf("Deleted breakpoint at %04X\n", i);
-						  breakpoint_at[i] = false;
-					  }
-				  }
-				  n_breakpoints_set = 0;
-				  break;
+				for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i) {
+					if (breakpoint_at[i]) {
+						printf("Deleted breakpoint at %04X\n", i);
+						breakpoint_at[i] = false;
+					}
+				}
+				n_breakpoints_set = 0;
+				break;
 
 		case 'i':
-				  for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i)
-					  if (breakpoint_at[i])
-						  printf("Breakpoint at %04X\n", i);
-				  break;
-
-		case 'q':
-				  end_emulation();
-				  exit_sdl_thread();
-				  return;
-
+				for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i)
+					if (breakpoint_at[i])
+						printf("Breakpoint at %04X\n", i);
+				break;
+		case 'r':
+				if (debug_mode == SINGLE_STEP) debug_mode = RUN;
 		default:
-				  printf("Unknown command '%c'\n", keycode);
-				  break;
+				break;
 	}
 }
 
-void dbg_log_instruction() {
+int dbg_log_instruction() {
 
-	if (debug_mode == SINGLE_STEP) {
-		cursor_cpu = pc;
+	if (debug_mode == NEXT_STEP) { debug_mode = SINGLE_STEP; cursor_cpu = pc; }
+
+	if (debug_mode == RUN) {
+
+		if (n_breakpoints_set > 0 && breakpoint_at[pc]) {
+			debug_mode = SINGLE_STEP;
+			show_debugger = 1;
+			cursor_cpu = pc;
+			printf("forcing cursor\n");
+		}
 	}
 
-	if ( (show_debugger) && ((debug_mode == SINGLE_STEP) || (frame_offset == 0)) ) {
+	if ( (show_debugger) && ( (debug_mode == SINGLE_STEP) || (frame_offset == 0)) ) {
 		//every frame, output new debugger values
 
 		mvsdldbg_printf(96, 0, "\361PC: \360%04X", pc);
@@ -511,6 +529,15 @@ void dbg_log_instruction() {
 		mvsdldbg_printf(96, 4, "\361SP: \360%02X", s);
 
 		mvsdldbg_printf(96, 5, "\362%c%c%c%c%c%c\360",carry ? 'C' : 'c', !(zn & 0xFF) ? 'Z' : 'z', irq_disable ? 'I' : 'i', decimal ? 'D' : 'd', overflow ? 'V' : 'v', !!(zn & 0x180) ? 'N' : 'n');
+		
+		if (pending_nmi && pending_irq)
+			mvsdldbg_puts(96,6," (pending NMI and IRQ)");
+		else if (pending_nmi)
+			mvsdldbg_puts(96,6," (pending NMI)");
+		else if (pending_irq)
+			mvsdldbg_puts(96,6," (pending IRQ)");
+		else
+			mvsdldbg_clear(96,6,24,1);
 
 		sdldbg_move(0,0);
 		sdldbg_clear(64, 50);   
@@ -531,46 +558,42 @@ void dbg_log_instruction() {
 		}
 
 		//print zeropage
-		for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(72 - 3, 30 + iy, "\xF1%01Xx", iy);
-		for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(72 + (3*ix), 30 - 1, "\xF5x%01X", ix );
-
-		for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(72 + (3*ix), 30 + 16, "\xF5x%01X", ix );
-		for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(72 + (16*3), 30 + iy, "\xF1%01Xx", iy);
+		for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(77 - 3, 33 + iy, "\xF1%01Xx", iy);
+		for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(77 + (3*ix), 33 - 1, "\xF5x%01X", ix );
+		for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(77 + (3*ix), 33 + 16, "\xF5x%01X", ix );
+		for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(77 + (16*3), 33 + iy, "\xF1%01Xx", iy);
 
 		for (int iy = 0; iy < 16; iy++)
 			for (int ix = 0; ix < 16; ix++)
-				mvsdldbg_printf(72 + (3*ix), 30 + iy, "%c%02X", ((ix+iy)%2 ? 0xF3 : 0xF4) , ram[iy * 16 + ix] );
+				mvsdldbg_printf(77 + (3*ix), 33 + iy, "%c%02X", ((ix+iy)%2 ? 0xF3 : 0xF4) , ram[iy * 16 + ix] );
 
+		//print RAM
+
+		for (int iy = 0; iy < 8; iy++) {
+
+			mvsdldbg_printf(23,51+iy,"\365%04X: \360",cursor_ram + 32*iy);
+
+			for (int ix=0; ix<32; ix++) {
+				sdldbg_printf("%c%02X", ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ), read_without_side_effects(cursor_ram + (32*iy) + ix) );
+				if ((ix & 15) == 15) sdldbg_puts(" ");
+			}
+
+			sdldbg_puts("\360");
+
+			for (int ix=0; ix<32; ix++) {
+				uint8_t v = read_without_side_effects(cursor_ram + (32*iy) + ix);
+				sdldbg_printf("%c", ((v >= 32) && (v < 128)) ? v : '.');
+			}
+		}
 	}
 
-	if (debug_mode == RUN) {
-		if ((n_breakpoints_set > 0 && breakpoint_at[pc]) || keys[SDL_SCANCODE_F7])
-			debug_mode = SINGLE_STEP;
-		else
-			return;
+	if (show_debugger) {
+		int k = sdldbg_getkey_nonblock();
+		if (k) {
+			dbg_kbdinput(k);	
+		}
 	}
 
-	if (debug_mode == SINGLE_STEP || debug_mode == TRACE) {
-
-		if (pending_nmi && pending_irq)
-			puts(" (pending NMI and IRQ)");
-		else if (pending_nmi)
-			puts(" (pending NMI)");
-		else if (pending_irq)
-			puts(" (pending IRQ)");
-		else
-			putchar('\n');
-
-		if (debug_mode == TRACE) return;
-	}
-
-	int oldpb = 0;
-	if (debug_mode == SINGLE_STEP) oldpb = audio_pause(1);
-
-	while (debug_mode == SINGLE_STEP) {
-		draw_frame();
-		int keycode = sdldbg_getkey();
-		if (keycode) dbg_kbdinput_cb(1,keycode);
-	}
-	audio_pause(oldpb);
+	if (debug_mode == SINGLE_STEP) audio_pause(1); else audio_pause(0);
+	return (debug_mode != SINGLE_STEP);
 }

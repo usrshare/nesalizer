@@ -13,7 +13,7 @@
 
 // Number of seconds of rewind to support. The rewind buffer is a ring buffer
 // where a new state will overwrite the oldest state when the buffer is full.
-unsigned const rewind_seconds = 60;
+unsigned const rewind_seconds = 10;
 
 // Buffer for a single plain old save state. Not related to rewinding.
 static uint8_t *state;

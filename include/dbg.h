@@ -4,7 +4,6 @@
 int reset_debugger(void);
 int set_debugger_vis(bool vis);
 
-void dbg_log_instruction(void);
-
-void dbg_kbdinput_cb(bool keystate, int keycode);
+//returns 1 if execution may resume and 0 otherwise.
+int dbg_log_instruction(void);
 #endif

@@ -119,6 +119,8 @@ void draw_frame() {
 		frame_available = true;
 		swap(back_buffer, front_buffer);
 		SDL_CondSignal(frame_available_cond);
+	} else {
+		printf("dropping frame\n");
 	}
 	SDL_UnlockMutex(frame_lock);
 }
@@ -139,8 +141,14 @@ static void audio_callback(void*, Uint8 *stream, int len) {
 void lock_audio() { SDL_LockAudioDevice(audio_device_id); }
 void unlock_audio() { SDL_UnlockAudioDevice(audio_device_id); }
 
-bool audio_pb = 0;
-int audio_pause(bool value) { int oldpb = audio_pb; SDL_PauseAudioDevice(audio_device_id, value); audio_pb = value; return oldpb; }
+bool audio_pb = 1;
+int audio_pause(bool value) {
+
+	if (value == audio_pb) return value;
+	int oldpb = audio_pb;
+	SDL_PauseAudioDevice(audio_device_id, value);
+	audio_pb = value;
+	return oldpb; }
 
 //
 // Input
@@ -150,6 +158,8 @@ Uint8 const *keys;
 
 Uint8 *keys_lf = NULL;
 int keys_size = 0;
+
+int lastdbgkey = 0;
 
 #define KEY_PRESSED(i) ( (keys[i]) & (!keys_lf[i]) )
 #define KEY_RELEASED(i) ( (!keys[i]) & (keys_lf[i]) )
@@ -200,14 +210,15 @@ static void process_events_sub(SDL_Event event) {
 
 	switch(event.type) {
 		case SDL_KEYDOWN:
-		case SDL_KEYUP:
 			if (show_debugger) {
 				int keycode = event.key.keysym.sym;
 				int mods = SDL_GetModState();
 				if ((mods & KMOD_SHIFT)) keycode |= KM_SHIFT;
 				if ((mods & KMOD_CTRL)) keycode |= KM_CTRL;
 				if ((mods & KMOD_ALT)) keycode |= KM_ALT;
-				dbg_kbdinput_cb(event.type == SDL_KEYDOWN, keycode);
+			
+				lastdbgkey = keycode;	
+				//dbg_kbdinput_cb(event.type == SDL_KEYDOWN, keycode);
 			}
 			break;
 		case SDL_WINDOWEVENT:
@@ -229,14 +240,17 @@ static void process_events_sub(SDL_Event event) {
 
 }
 
+int ignore_events = 0;
 static void process_events() {
 	SDL_Event event;
+	if (!ignore_events) {
 	SDL_LockMutex(event_lock);
 	while (SDL_PollEvent(&event)) {
 		process_events_sub(event);
 
 	}
 	SDL_UnlockMutex(event_lock);
+	}
 }
 
 const SDL_Rect screentex_valid = {.x = 12, .y = 0, .w = 256, .h = 240};
@@ -528,6 +542,20 @@ int sdldbg_move(int x, int y) {
 	return 0;
 }
 
+int mvsdldbg_clear(int x, int y, int width, int height) {
+	sdldbg_move(x,y);
+	return sdldbg_clear(width, height);
+}
+
+int sdldbg_getkey_nonblock(void) {
+
+	int r = lastdbgkey;
+	if (r) {
+		lastdbgkey = 0;
+		return r;
+	} else return 0;
+}
+
 int sdldbg_getkey(void) {
 
     	int pb = audio_pause(1);
@@ -541,27 +569,23 @@ int sdldbg_getkey(void) {
 
 	int keycode = 0;
 
-	SDL_EventState(SDL_KEYDOWN, SDL_ENABLE);
-
-	bool loop = 1;
+	int loop = 1;
 
 	while (loop) {
 
-		draw_actual_frame();
-
+		draw_frame();
 		SDL_Event event;
 		SDL_WaitEvent(&event);
+		int mods = 0;
 		switch (event.type) {
 
 			case SDL_KEYDOWN:
-				if (event.key.keysym.sym < 128) {
 					keycode = event.key.keysym.sym;
-					int mods = SDL_GetModState();
+					mods = SDL_GetModState();
 					if ((mods & KMOD_SHIFT)) keycode |= KM_SHIFT;
 					if ((mods & KMOD_CTRL)) keycode |= KM_CTRL;
 					if ((mods & KMOD_ALT)) keycode |= KM_ALT;
 					loop = 0;
-				}
 				break;
 			case SDL_KEYUP:
 				break;
@@ -570,8 +594,6 @@ int sdldbg_getkey(void) {
 				break;
 		}
 	}
-
-	SDL_EventState(SDL_KEYDOWN, SDL_IGNORE);
 
 	memcpy(debug_contents + (128 * 59), bk_contents, 128);
 	memcpy(debug_colors + (128 * 59), bk_colors, 128);
@@ -600,11 +622,11 @@ int sdl_text_prompt(const char* prompt, char* value, size_t value_sz) {
 	bool loop = 1, success = 0;
 
 	SDL_StartTextInput();
-	//SDL_LockMutex(prompt_mutex);
+	ignore_events = 1;
 	while (loop) {
 
 		mvsdldbg_printf(3, 59, "%s\x7F ", new_textinput);
-		draw_actual_frame();
+		draw_frame();
 
 		SDL_Event event;
 
@@ -643,7 +665,7 @@ int sdl_text_prompt(const char* prompt, char* value, size_t value_sz) {
 		}
 	}
 
-	//SDL_UnlockMutex(prompt_mutex);
+	ignore_events = 0;
 	SDL_StopTextInput();
 
 	if (success) strncpy(value,new_textinput,value_sz);

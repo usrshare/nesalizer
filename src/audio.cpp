@@ -65,7 +65,7 @@ void read_samples(int16_t *dst, size_t len) {
             assert(start_index + avail == end_index);
             start_index = end_index;
 #ifndef RUN_TESTS
-            puts("audio buffer underflow!");
+            printf("audio buffer underflow by %zu!\n",len - avail);
 #endif
         }
     }
