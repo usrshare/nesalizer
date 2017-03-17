@@ -194,9 +194,9 @@ void handle_ui_keys() {
 		save_state();
 	else if (keys[SDL_SCANCODE_F8])
 		load_state();
-
+#ifdef INCLUDE_REWIND
 	handle_rewind(keys[SDL_SCANCODE_BACKSPACE]);
-
+#endif
 	if (reset_pushed)
 		soft_reset();
 

@@ -22,6 +22,8 @@ CONF              := release-debug
 RECORD_MOVIE      = 0
 # If "1", passes -rdynamic to add symbols for backtraces
 BACKTRACE_SUPPORT = 1
+# If "1", allows to rewind time (very consuming)
+INCLUDE_REWIND = 0
 # If "1", configures for automatic test ROM running
 TEST              = 0
 
@@ -115,6 +117,10 @@ endif
 ifeq ($(BACKTRACE_SUPPORT),1)
     # No -rdynamic support in older Clang versions. This is equivalent.
     link_flags += -Wl,-export-dynamic
+endif
+
+ifeq ($(INCLUDE_REWIND),1)
+    compile_flags += -DINCLUDE_REWIND
 endif
 
 ifeq ($(RECORD_MOVIE),1)

@@ -11,16 +11,18 @@
 #include "save_states.h"
 #include "timing.h"
 
-// Number of seconds of rewind to support. The rewind buffer is a ring buffer
-// where a new state will overwrite the oldest state when the buffer is full.
-unsigned const rewind_seconds = 10;
-
 // Buffer for a single plain old save state. Not related to rewinding.
 static uint8_t *state;
 // Total state size. Varies depending on the mapper.
 static size_t state_size;
 // For the plain old save state
 static bool has_save;
+
+#ifdef INCLUDE_REWIND
+
+// Number of seconds of rewind to support. The rewind buffer is a ring buffer
+// where a new state will overwrite the oldest state when the buffer is full.
+unsigned const rewind_seconds = 10;
 
 static uint8_t *rewind_buf;
 // frame_len[n] is the length of frame n in CPU ticks, which is used to cleanly
@@ -34,6 +36,8 @@ static unsigned n_rewind_frames;
 static unsigned n_recorded_frames;
 
 bool is_backwards_frame;
+
+#endif
 
 template<bool calculating_size, bool is_save>
 static size_t transfer_system_state(uint8_t *buf) {
@@ -70,11 +74,15 @@ void save_state() {
 void load_state() {
     if (has_save) {
         // Clear rewind
-        n_recorded_frames = 0;
+#ifdef INCLUDE_REWIND
+	    n_recorded_frames = 0;
+#endif
 
         transfer_system_state<false, false>(state);
     }
 }
+
+#ifdef INCLUDE_REWIND
 
 //
 // Rewinding
@@ -143,17 +151,24 @@ void handle_rewind(bool do_rewind) {
         handle_forwards_frame();
 }
 
+#endif
+
 void init_save_states_for_rom() {
+#ifdef INCLUDE_REWIND
     n_rewind_frames = rewind_seconds*ppu_fps;
+#endif
 
     state_size = transfer_system_state<true, false>(0);
+#ifdef INCLUDE_REWIND
     size_t const rewind_buf_size = state_size*n_rewind_frames;
+#endif
 #ifndef RUN_TESTS
-    printf("save state size: %zu bytes\nrewind buffer size: %zu bytes\n",
-           state_size, rewind_buf_size);
+    printf("save state size: %zu bytes\n",
+           state_size);
 #endif
     fail_if(!(state = new (std::nothrow) uint8_t[state_size]),
       "failed to allocate %zu-byte buffer for save state", state_size);
+#ifdef INCLUDE_REWIND
     fail_if(!(rewind_buf = new (std::nothrow) uint8_t[rewind_buf_size]),
       "failed to allocate %zu-byte rewind buffer", rewind_buf_size);
     fail_if(!(frame_len = new (std::nothrow) unsigned[n_rewind_frames]),
@@ -161,12 +176,15 @@ void init_save_states_for_rom() {
       sizeof(unsigned)*n_rewind_frames);
 
     rewind_buf_i = 0;
+#endif
 }
 
 void deinit_save_states_for_rom() {
     free_array_set_null(state);
+#ifdef INCLUDE_REWIND
     free_array_set_null(rewind_buf);
     free_array_set_null(frame_len);
     n_recorded_frames = 0;
+#endif
     has_save = false;
 }
