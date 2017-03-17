@@ -139,8 +139,8 @@ static void audio_callback(void*, Uint8 *stream, int len) {
 void lock_audio() { SDL_LockAudioDevice(audio_device_id); }
 void unlock_audio() { SDL_UnlockAudioDevice(audio_device_id); }
 
-void start_audio_playback() { SDL_PauseAudioDevice(audio_device_id, 0); }
-void stop_audio_playback() { SDL_PauseAudioDevice(audio_device_id, 1); }
+bool audio_pb = 0;
+int audio_pause(bool value) { int oldpb = audio_pb; SDL_PauseAudioDevice(audio_device_id, value); audio_pb = value; return oldpb; }
 
 //
 // Input
@@ -196,13 +196,20 @@ void handle_ui_keys() {
 
 static bool pending_sdl_thread_exit;
 
-SDL_mutex *prompt_mutex;
-SDL_cond   *prompt_cond;
-
 static void process_events_sub(SDL_Event event) {
 
 	switch(event.type) {
-
+		case SDL_KEYDOWN:
+		case SDL_KEYUP:
+			if (show_debugger) {
+				int keycode = event.key.keysym.sym;
+				int mods = SDL_GetModState();
+				if ((mods & KMOD_SHIFT)) keycode |= KM_SHIFT;
+				if ((mods & KMOD_CTRL)) keycode |= KM_CTRL;
+				if ((mods & KMOD_ALT)) keycode |= KM_ALT;
+				dbg_kbdinput_cb(event.type == SDL_KEYDOWN, keycode);
+			}
+			break;
 		case SDL_WINDOWEVENT:
 
 			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
@@ -234,31 +241,9 @@ static void process_events() {
 
 const SDL_Rect screentex_valid = {.x = 12, .y = 0, .w = 256, .h = 240};
 
-void sdl_thread() {
-	for (;;) {
-
-		// Wait for the emulation thread to signal that a frame has completed
-
-		SDL_LockMutex(frame_lock);
-		ready_to_draw_new_frame = true;
-		while (!frame_available && !pending_sdl_thread_exit)
-			SDL_CondWait(frame_available_cond, frame_lock);
-		if (pending_sdl_thread_exit) {
-			SDL_UnlockMutex(frame_lock);
-			return;
-		}
-		frame_available = ready_to_draw_new_frame = false;
-		SDL_UnlockMutex(frame_lock);
-
-		// Process events and calculate controller input state (which might
-		// need left+right/up+down elimination)
-
-		process_events();
-
-		// Draw the new frame
-
-
-		fail_if(SDL_UpdateTexture(screen_tex, &screentex_valid, front_buffer, 256*sizeof(Uint32)),
+static void draw_actual_frame(void) {
+		
+	fail_if(SDL_UpdateTexture(screen_tex, &screentex_valid, front_buffer, 256*sizeof(Uint32)),
 				"failed to update screen texture: %s", SDL_GetError());
 		fail_if(SDL_RenderCopy(renderer, screen_tex, 0, &viewport),
 				"failed to copy rendered frame to render target: %s", SDL_GetError());
@@ -302,6 +287,32 @@ void sdl_thread() {
 
 		}
 		SDL_RenderPresent(renderer);
+}
+
+void sdl_thread() {
+	for (;;) {
+
+		// Wait for the emulation thread to signal that a frame has completed
+
+		SDL_LockMutex(frame_lock);
+		ready_to_draw_new_frame = true;
+		while (!frame_available && !pending_sdl_thread_exit)
+			SDL_CondWait(frame_available_cond, frame_lock);
+		if (pending_sdl_thread_exit) {
+			SDL_UnlockMutex(frame_lock);
+			return;
+		}
+		frame_available = ready_to_draw_new_frame = false;
+		SDL_UnlockMutex(frame_lock);
+
+		// Process events and calculate controller input state (which might
+		// need left+right/up+down elimination)
+
+		process_events();
+
+		// Draw the new frame
+
+		draw_actual_frame();
 	}
 }
 
@@ -422,10 +433,6 @@ void init_sdl() {
 
 	fail_if(!(frame_lock = SDL_CreateMutex()),
 			"failed to create frame mutex: %s", SDL_GetError());
-	fail_if(!(prompt_mutex = SDL_CreateMutex()),
-			"failed to create debug prompt mutex: %s", SDL_GetError());
-	fail_if(!(prompt_cond = SDL_CreateCond()),
-			"failed to create debug prompt condition variable: %s", SDL_GetError());
 	fail_if(!(frame_available_cond = SDL_CreateCond()),
 			"failed to create frame condition variable: %s", SDL_GetError());
 }
@@ -521,32 +528,9 @@ int sdldbg_move(int x, int y) {
 	return 0;
 }
 
-int sdldbg_getkey_nonblock(void) {
-
-	int keycode = 0;
-
-	SDL_Event event;
-	SDL_PollEvent(&event);
-	switch (event.type) {
-
-		case SDL_KEYDOWN:
-			if (event.key.keysym.sym < 128) {
-				keycode = event.key.keysym.sym;
-				int mods = SDL_GetModState();
-				if ((mods & KMOD_SHIFT)) keycode |= KM_SHIFT;
-				if ((mods & KMOD_CTRL)) keycode |= KM_CTRL;
-				if ((mods & KMOD_ALT)) keycode |= KM_ALT;
-			}
-			break;
-		default:
-			process_events_sub(event);
-			break;
-	}
-	return keycode;
-}
-
 int sdldbg_getkey(void) {
 
+    	int pb = audio_pause(1);
 	show_debugger = 1;
 
 	Uint8 bk_contents[128], bk_colors[128];
@@ -563,7 +547,7 @@ int sdldbg_getkey(void) {
 
 	while (loop) {
 
-		draw_frame();
+		draw_actual_frame();
 
 		SDL_Event event;
 		SDL_WaitEvent(&event);
@@ -579,6 +563,8 @@ int sdldbg_getkey(void) {
 					loop = 0;
 				}
 				break;
+			case SDL_KEYUP:
+				break;
 			default:
 				process_events_sub(event);
 				break;
@@ -589,25 +575,27 @@ int sdldbg_getkey(void) {
 
 	memcpy(debug_contents + (128 * 59), bk_contents, 128);
 	memcpy(debug_colors + (128 * 59), bk_colors, 128);
+	audio_pause(pb);
 	return keycode;
 }
 
-int sdl_text_prompt(const char* prompt, char* value, int value_sz) {
+int sdl_text_prompt(const char* prompt, char* value, size_t value_sz) {
 
+    	int pb = audio_pause(1);
 	show_debugger = 1;
 
 	Uint8 bk_contents[128*2], bk_colors[128*2];
 	memcpy(bk_contents, debug_contents + (128 * 58), (128*2));
 	memcpy(bk_colors, debug_colors + (128 * 58), (128*2));
 
-	mvsdldbg_printf(0, 58, "%-120s", prompt);
+	memset(debug_contents + (128*58), 0, 128*2);
+	memset(debug_colors + (128*58), 0, 128*2);
+
+	mvsdldbg_puts(0, 58, prompt);
 	mvsdldbg_puts(0, 59, " \xF3>\xF0 ");
 
 	char new_textinput[value_sz];
 	strcpy(new_textinput,value);
-
-	SDL_EventState(SDL_KEYDOWN        , SDL_ENABLE);
-	SDL_EventState(SDL_KEYUP          , SDL_ENABLE);
 
 	bool loop = 1, success = 0;
 
@@ -616,7 +604,7 @@ int sdl_text_prompt(const char* prompt, char* value, int value_sz) {
 	while (loop) {
 
 		mvsdldbg_printf(3, 59, "%s\x7F ", new_textinput);
-		draw_frame();
+		draw_actual_frame();
 
 		SDL_Event event;
 
@@ -637,6 +625,8 @@ int sdl_text_prompt(const char* prompt, char* value, int value_sz) {
 				}
 
 				break;
+			case SDL_KEYUP:
+				break;
 
 			case SDL_TEXTINPUT:
 				//printf("got text input: %s\n",event.text.text);
@@ -655,13 +645,12 @@ int sdl_text_prompt(const char* prompt, char* value, int value_sz) {
 
 	//SDL_UnlockMutex(prompt_mutex);
 	SDL_StopTextInput();
-	SDL_EventState(SDL_KEYDOWN        , SDL_IGNORE);
-	SDL_EventState(SDL_KEYUP          , SDL_IGNORE);
 
 	if (success) strncpy(value,new_textinput,value_sz);
 
 	memcpy(debug_contents + (128 * 58),bk_contents, (128*2));
 	memcpy(debug_colors + (128 * 58),bk_colors, (128*2));
+	audio_pause(pb);
 	return success;
 }
 
@@ -673,9 +662,6 @@ void deinit_sdl() {
 
 	SDL_DestroyMutex(frame_lock);
 	SDL_DestroyCond(frame_available_cond);
-
-	SDL_DestroyMutex(prompt_mutex);
-	SDL_DestroyCond(prompt_cond);
 
 	SDL_CloseAudioDevice(audio_device_id); // Prolly not needed, but play it safe
 	SDL_Quit();

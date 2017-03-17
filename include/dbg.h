@@ -6,4 +6,5 @@ int set_debugger_vis(bool vis);
 
 void dbg_log_instruction(void);
 
+void dbg_kbdinput_cb(bool keystate, int keycode);
 #endif

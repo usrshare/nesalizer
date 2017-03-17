@@ -25,9 +25,8 @@ int const sample_rate = 44100;
 void lock_audio();
 void unlock_audio();
 
-// Stop and start audio playback in SDL
-void start_audio_playback();
-void stop_audio_playback();
+// Stop and start audio playback in SDL, returns old state.
+int audio_pause(bool value);
 
 // Input and events
 
@@ -44,13 +43,12 @@ int sdldbg_printf(const char* format, ...);
 int mvsdldbg_printf(int x, int y, const char* format, ...);
 int sdldbg_move(int x, int y);
 int sdldbg_clear(int width, int height);
-
 #define KM_SHIFT 128
 #define KM_CTRL 256
 #define KM_ALT 512
 
 int sdldbg_getkey(void);
-int sdl_text_prompt(const char* prompt, char* value, int value_sz);
+int sdl_text_prompt(const char* prompt, char* value, size_t value_sz);
 
 extern Uint8 debug_contents[128*60];
 extern Uint8 debug_colors[128*60];

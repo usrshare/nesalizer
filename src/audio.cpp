@@ -213,7 +213,7 @@ void end_audio_frame() {
     }
     else {
         if (fill_level() >= 0.5) {
-            start_audio_playback();
+            audio_pause(0);
             playback_started = true;
         }
     }
