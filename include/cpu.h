@@ -46,3 +46,21 @@ void end_emulation();
 
 template<bool calculating_size, bool is_save>
 void transfer_cpu_state(uint8_t *&buf);
+
+// Debugging
+
+extern uint8_t ram[0x800];
+extern uint16_t pc;
+extern uint8_t a, s, x, y;
+
+extern unsigned zn;
+
+extern bool carry;
+extern bool irq_disable;
+extern bool decimal;
+extern bool overflow;
+
+extern uint8_t *wram_6000_page;
+
+extern bool pending_irq;
+extern bool pending_nmi;

@@ -12,6 +12,7 @@
 #  include "test.h"
 #endif
 
+#include "dbg.h"
 #include "dbgfont.xpm"
 
 #include <SDL.h>
@@ -70,7 +71,7 @@ static SDL_cond  *frame_available_cond;
 static bool ready_to_draw_new_frame;
 static bool frame_available;
 
-static bool show_debugger;
+bool show_debugger;
 
 Uint8 debug_contents[128 * 60]; //640x480 / 5x8 font
 Uint8 debug_colors[128*60];
@@ -176,6 +177,7 @@ void handle_ui_keys() {
 
 	if (keys[SDL_SCANCODE_LALT] && (KEY_PRESSED(SDL_SCANCODE_D))) {
 		show_debugger = !show_debugger;
+		set_debugger_vis(show_debugger);
 	}
 
 	if (keys[SDL_SCANCODE_F5])
@@ -279,7 +281,9 @@ void sdl_thread() {
 				dbgrect.y = dstrect.y + (iy*8);
 				for (int ix=0; ix < 128; ix++) {
 					dbgrect.x = dstrect.x + (ix*5);
-					if (debug_contents[iy*128+ix] >= 32) {
+					Uint8 dbgcont = debug_contents[iy*128+ix];
+					if (dbgcont == 0) dbgcont = 32;
+					if (dbgcont >= 32) {
 						charrect.x = ((debug_contents[iy*128+ix] - 32) % 16) * 5;
 						charrect.y = ((debug_contents[iy*128+ix] - 32) / 16) * 8;
 						if (debug_colors[iy*128+ix] != lastcolor) {
@@ -495,6 +499,14 @@ int sdldbg_printf(const char* format, ...) {
 	return r;
 }
 
+int sdldbg_clear(int width, int height) {
+	for (int iy = debug_cur_y; iy < (debug_cur_y + height); iy++) {
+		memset(debug_contents + iy*128 + debug_cur_x, 0, width);
+		memset(debug_colors + iy*128 + debug_cur_x, 0, width);
+	}
+	return 0;
+}
+
 int mvsdldbg_printf(int x, int y, const char* format, ...) {
 
 	va_list ap;
@@ -506,7 +518,12 @@ int mvsdldbg_printf(int x, int y, const char* format, ...) {
 	return r;
 }
 
-int sdldbg_getchar(void) {
+int sdldbg_move(int x, int y) {
+	debug_cur_x = x; debug_cur_y = y;
+	return 0;
+}
+
+int sdldbg_getkey(void) {
 
 	show_debugger = 1;
 

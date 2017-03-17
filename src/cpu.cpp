@@ -10,6 +10,7 @@
 #include "audio.h"
 #include "controller.h"
 #include "cpu.h"
+#include "dbg.h"
 #include "input.h"
 #include "mapper.h"
 #include "opcodes.h"
@@ -42,8 +43,8 @@ void soft_reset()      { pending_event = pending_reset = true; }
 
 // Set true if interrupt polling detects a pending IRQ or NMI. The next
 // "instruction" executed is the interrupt sequence.
-static bool pending_irq;
-static bool pending_nmi;
+bool pending_irq;
+bool pending_nmi;
 
 static bool corrupt_now;
 unsigned int randcorrupt = 0;
@@ -58,15 +59,15 @@ static unsigned ticks_till_reset;
 // RAM, registers, status flags, and misc. state
 //
 
-static uint8_t ram[0x800];
+uint8_t ram[0x800];
 
 // Possible optimization: Making some of the variables a natural size for the
 // implementation architecture might be faster. CPU emulation is already
 // relatively speedy though, and we wouldn't get automatic wrapping.
 
 // Registers
-static uint16_t pc;
-static uint8_t a, s, x, y;
+uint16_t pc;
+uint8_t a, s, x, y;
 
 // Status flags
 
@@ -79,12 +80,12 @@ static uint8_t a, s, x, y;
 // Having zn & 0x100 also indicate that the negative flag is set allows the two
 // flags to be set separately, which is required by the BIT instruction and
 // when pulling flags from the stack.
-static unsigned zn;
+unsigned zn;
 
-static bool carry;
-static bool irq_disable;
-static bool decimal;
-static bool overflow;
+bool carry;
+bool irq_disable;
+bool decimal;
+bool overflow;
 
 // The byte after the opcode byte. Always fetched, so factoring out the fetch
 // saves logic.
@@ -786,9 +787,6 @@ extern uint8_t const polls_irq_after_first_cycle[256];
 // Main CPU loop
 //
 
-#ifdef INCLUDE_DEBUGGER
-static void log_instruction();
-#endif
 static void set_cpu_cold_boot_state();
 static void reset_cpu();
 
@@ -851,7 +849,7 @@ void run() {
         }
 
 #ifdef INCLUDE_DEBUGGER
-        log_instruction();
+        dbg_log_instruction();
 #endif
 
         uint8_t const opcode = read_mem(pc++);
@@ -1307,353 +1305,8 @@ void run() {
     }
 }
 
-//
-// Debugging and tracing
-//
 
-#ifdef INCLUDE_DEBUGGER
 
-static int read_without_side_effects(uint16_t addr) {
-    switch (pc) {
-    case 0x0000 ... 0x1FFF: return ram[addr & 0x07FF];
-    case 0x6000 ... 0x7FFF: return wram_6000_page ? wram_6000_page[addr & 0x1FFF] : 0;
-    case 0x8000 ... 0xFFFF: return read_prg(addr);
-    default:                return -1;
-    }
-}
-
-static char const *decode_addr(uint16_t addr) {
-    static char addr_str[64];
-
-    static char const *const desc_2000_regs[]
-      = { "PPUCTRL", "PPUMASK"  , "PPUSTATUS", "OAMADDR",
-          "OAMDATA", "PPUSCROLL", "PPUADDR"  , "PPUDATA" };
-
-    static char const *const desc_4000_regs[]
-      = { // $4000-$4007
-          "Pulse 1 duty, loop, and volume", "Pulse 1 sweep unit"           ,
-          "Pulse 1 timer low"             , "Pulse 1 length and timer high",
-          "Pulse 2 duty, loop, and volume", "Pulse 2 sweep unit"           ,
-          "Pulse 2 timer low"             , "Pulse 2 length and timer high",
-
-          // $4008-$400B
-          "Triangle linear length", 0, "Triangle timer low", "Triangle length and timer high",
-
-          // $400C-$400F
-          "Noise volume", 0, "Noise loop and period", "Noise length",
-
-          // $4010-$4013
-          "DMC IRQ, loop, and frequency", "DMC counter"      ,
-          "DMC sample address"          , "DMC sample length",
-
-          // $4014-$4017
-          "OAM DMA", "APU status", "Read controller 1",
-          "Frame counter and read controller 2" };
-
-    char const *addr_desc;
-    if (addr >= 0x2000 && addr <= 0x3FFF)
-        addr_desc = desc_2000_regs[addr & 7];
-    else if (addr >= 0x4000 && addr <= 0x4017)
-        addr_desc = desc_4000_regs[addr - 0x4000];
-    else
-        addr_desc = 0;
-
-    if (addr_desc)
-        sprintf(addr_str, "$%04X (%s)", addr, addr_desc);
-    else
-        sprintf(addr_str, "$%04X", addr);
-    return addr_str;
-}
-
-// TODO: Tableify
-
-#define INS_IMP(name)    case name         : fputs (#name"         ", stdout);                            break;
-#define INS_ACC(name)    case name##_ACC   : fputs (#name" A       ", stdout);                            break;
-#define INS_IMM(name)    case name##_IMM   : printf(#name" #$%02X    ", op_1);                            break;
-#define INS_ZERO(name)   case name##_ZERO  : printf(#name" $%02X     ", op_1);                            break;
-#define INS_ZERO_X(name) case name##_ZERO_X: printf(#name" $%02X,X   ", op_1);                            break;
-#define INS_ZERO_Y(name) case name##_ZERO_Y: printf(#name" $%02X,Y   ", op_1);                            break;
-#define INS_REL(name)    case name         : printf(#name" $%04X   "  , uint16_t(pc + 2 + (int8_t)op_1)); break;
-#define INS_IND_X(name)  case name##_IND_X : printf(#name" ($%02X,X) ", op_1);                            break;
-#define INS_IND_Y(name)  case name##_IND_Y : printf(#name" ($%02X),Y ", op_1);                            break;
-#define INS_ABS(name)    case name##_ABS   : printf(#name" %s   "  , decode_addr((op_2 << 8) | op_1));    break;
-#define INS_ABS_X(name)  case name##_ABS_X : printf(#name" %s,X "  , decode_addr((op_2 << 8) | op_1));    break;
-#define INS_ABS_Y(name)  case name##_ABS_Y : printf(#name" %s,Y "  , decode_addr((op_2 << 8) | op_1));    break;
-#define INS_IND(name)    case name##_IND   : printf(#name" (%s) "  , decode_addr((op_2 << 8) | op_1));    break;
-
-static bool     breakpoint_at[0x10000];
-// Optimization to avoid trashing the cache via breakpoint_at lookups when no
-// breakpoints are set
-static unsigned n_breakpoints_set;
-
-static enum { RUN, SINGLE_STEP, TRACE } debug_mode;// = SINGLE_STEP;
-
-static void print_instruction(uint16_t addr) {
-    int opcode, op_1, op_2;
-
-    printf("%04X: ", addr);
-
-    if ((opcode = read_without_side_effects(addr)) == -1) {
-        puts("(strange address while reading opcode - skipping)");
-        return;
-    }
-
-    switch (opcode) {
-    // Implied
-    INS_IMP(BRK) INS_IMP(RTI) INS_IMP(RTS) INS_IMP(PHA) INS_IMP(PHP)
-    INS_IMP(PLA) INS_IMP(PLP) INS_IMP(CLC) INS_IMP(CLD) INS_IMP(CLI)
-    INS_IMP(CLV) INS_IMP(SEC) INS_IMP(SED) INS_IMP(SEI) INS_IMP(DEX)
-    INS_IMP(DEY) INS_IMP(INX) INS_IMP(INY) INS_IMP(NO0) INS_IMP(NO1)
-    INS_IMP(NO2) INS_IMP(NO3) INS_IMP(NO4) INS_IMP(NO5) INS_IMP(NOP)
-    INS_IMP(TAX) INS_IMP(TAY) INS_IMP(TSX) INS_IMP(TXA) INS_IMP(TXS)
-    INS_IMP(TYA)
-
-    // KIL instructions (implied)
-    INS_IMP(KI0) INS_IMP(KI1) INS_IMP(KI2) INS_IMP(KI3) INS_IMP(KI4)
-    INS_IMP(KI5) INS_IMP(KI6) INS_IMP(KI7) INS_IMP(KI8) INS_IMP(KI9)
-    INS_IMP(K10) INS_IMP(K11)
-
-    // Accumulator
-    INS_ACC(ASL) INS_ACC(LSR) INS_ACC(ROL) INS_ACC(ROR)
-
-    default: goto needs_first_operand;
-    }
-    return;
-
-needs_first_operand:
-    if ((op_1 = read_without_side_effects(addr + 1)) == -1) {
-        puts("(strange address while reading first operand byte - skipping)");
-        return;
-    }
-
-    switch (opcode) {
-    // Immediate
-    INS_IMM(ADC) INS_IMM(ALR) INS_IMM(AN0) INS_IMM(AN1) INS_IMM(AND)
-    INS_IMM(ARR) INS_IMM(AXS) INS_IMM(ATX) INS_IMM(CMP) INS_IMM(CPX)
-    INS_IMM(CPY) INS_IMM(EOR) INS_IMM(LDA) INS_IMM(LDX) INS_IMM(LDY)
-    INS_IMM(NO0) INS_IMM(NO1) INS_IMM(NO2) INS_IMM(NO3) INS_IMM(NO4)
-    INS_IMM(ORA) INS_IMM(SB2) INS_IMM(SBC) INS_IMM(XAA)
-
-    // Zero page
-    INS_ZERO(ADC) INS_ZERO(AND) INS_ZERO(BIT) INS_ZERO(CMP)
-    INS_ZERO(CPX) INS_ZERO(CPY) INS_ZERO(DCP) INS_ZERO(EOR)
-    INS_ZERO(ISC) INS_ZERO(LAX) INS_ZERO(LDA) INS_ZERO(LDX)
-    INS_ZERO(LDY) INS_ZERO(NO0) INS_ZERO(NO1) INS_ZERO(NO2)
-    INS_ZERO(ORA) INS_ZERO(SBC) INS_ZERO(SLO) INS_ZERO(SRE)
-    INS_ZERO(SAX) INS_ZERO(ASL) INS_ZERO(LSR) INS_ZERO(RLA)
-    INS_ZERO(RRA) INS_ZERO(ROL) INS_ZERO(ROR) INS_ZERO(INC)
-    INS_ZERO(DEC) INS_ZERO(STA) INS_ZERO(STX) INS_ZERO(STY)
-
-    // Zero page, X
-    INS_ZERO_X(ADC) INS_ZERO_X(AND) INS_ZERO_X(CMP) INS_ZERO_X(DCP)
-    INS_ZERO_X(EOR) INS_ZERO_X(ISC) INS_ZERO_X(LDA) INS_ZERO_X(LDY)
-    INS_ZERO_X(NO0) INS_ZERO_X(NO1) INS_ZERO_X(NO2) INS_ZERO_X(NO3)
-    INS_ZERO_X(NO4) INS_ZERO_X(NO5) INS_ZERO_X(ORA) INS_ZERO_X(SBC)
-    INS_ZERO_X(SLO) INS_ZERO_X(SRE) INS_ZERO_X(ASL) INS_ZERO_X(DEC)
-    INS_ZERO_X(INC) INS_ZERO_X(LSR) INS_ZERO_X(RLA) INS_ZERO_X(RRA)
-    INS_ZERO_X(ROL) INS_ZERO_X(ROR) INS_ZERO_X(STA) INS_ZERO_X(STY)
-
-    // Zero page, Y
-    INS_ZERO_Y(SAX) INS_ZERO_Y(LAX) INS_ZERO_Y(LDX) INS_ZERO_Y(STX)
-
-    // Relative (branch instructions)
-    INS_REL(BCC) INS_REL(BCS) INS_REL(BVC) INS_REL(BVS) INS_REL(BEQ)
-    INS_REL(BMI) INS_REL(BNE) INS_REL(BPL)
-
-    // (Indirect,X)
-    INS_IND_X(ADC) INS_IND_X(AND) INS_IND_X(CMP) INS_IND_X(DCP)
-    INS_IND_X(EOR) INS_IND_X(ISC) INS_IND_X(LAX) INS_IND_X(LDA)
-    INS_IND_X(ORA) INS_IND_X(RLA) INS_IND_X(RRA) INS_IND_X(SAX)
-    INS_IND_X(SBC) INS_IND_X(SLO) INS_IND_X(SRE) INS_IND_X(STA)
-
-    // (Indirect),Y
-    INS_IND_Y(ADC) INS_IND_Y(AND) INS_IND_Y(AXA) INS_IND_Y(CMP)
-    INS_IND_Y(DCP) INS_IND_Y(EOR) INS_IND_Y(ISC) INS_IND_Y(LAX)
-    INS_IND_Y(LDA) INS_IND_Y(ORA) INS_IND_Y(RLA) INS_IND_Y(RRA)
-    INS_IND_Y(SBC) INS_IND_Y(SLO) INS_IND_Y(SRE) INS_IND_Y(STA)
-
-    default: goto needs_second_operand;
-    }
-    return;
-
-needs_second_operand:
-    if ((op_2 = read_without_side_effects(addr + 2)) == -1) {
-        puts("(strange address while reading second operand byte - skipping)");
-        return;
-    }
-
-    switch (opcode) {
-    // Absolute
-    INS_ABS(JMP) INS_ABS(JSR) INS_ABS(ADC) INS_ABS(AND) INS_ABS(BIT)
-    INS_ABS(CMP) INS_ABS(CPX) INS_ABS(CPY) INS_ABS(DCP) INS_ABS(EOR)
-    INS_ABS(ISC) INS_ABS(LAX) INS_ABS(LDA) INS_ABS(LDX) INS_ABS(LDY)
-    INS_ABS(NOP) INS_ABS(ORA) INS_ABS(SBC) INS_ABS(SLO) INS_ABS(SRE)
-    INS_ABS(ASL) INS_ABS(DEC) INS_ABS(INC) INS_ABS(LSR) INS_ABS(RLA)
-    INS_ABS(RRA) INS_ABS(ROL) INS_ABS(ROR) INS_ABS(SAX) INS_ABS(STA)
-    INS_ABS(STX) INS_ABS(STY)
-
-    // Absolute,X
-    INS_ABS_X(ADC) INS_ABS_X(AND) INS_ABS_X(CMP) INS_ABS_X(DCP)
-    INS_ABS_X(EOR) INS_ABS_X(ISC) INS_ABS_X(LDA) INS_ABS_X(LDY)
-    INS_ABS_X(NO0) INS_ABS_X(NO1) INS_ABS_X(NO2) INS_ABS_X(NO3)
-    INS_ABS_X(NO4) INS_ABS_X(NO5) INS_ABS_X(ORA) INS_ABS_X(RLA)
-    INS_ABS_X(RRA) INS_ABS_X(SAY) INS_ABS_X(SBC) INS_ABS_X(SLO)
-    INS_ABS_X(SRE) INS_ABS_X(ASL) INS_ABS_X(DEC) INS_ABS_X(INC)
-    INS_ABS_X(LSR) INS_ABS_X(ROL) INS_ABS_X(ROR) INS_ABS_X(STA)
-
-    // Absolute,Y
-    INS_ABS_Y(ADC) INS_ABS_Y(AND) INS_ABS_Y(AXA) INS_ABS_Y(CMP)
-    INS_ABS_Y(DCP) INS_ABS_Y(EOR) INS_ABS_Y(ISC) INS_ABS_Y(LAX)
-    INS_ABS_Y(LAS) INS_ABS_Y(LDA) INS_ABS_Y(LDX) INS_ABS_Y(ORA)
-    INS_ABS_Y(RLA) INS_ABS_Y(RRA) INS_ABS_Y(SBC) INS_ABS_Y(SLO)
-    INS_ABS_Y(SRE) INS_ABS_Y(STA) INS_ABS_Y(TAS) INS_ABS_Y(XAS)
-
-    // Indirect
-    INS_IND(JMP)
-
-    default: UNREACHABLE
-    }
-}
-
-static void log_instruction() {
-
-	if ((debug_mode == SINGLE_STEP) || (frame_offset == 0)) {
-		//every frame, output new debugger values
-
-	mvsdldbg_printf(96, 0, "PC: %04X", pc);
-	mvsdldbg_printf(96, 1, "A:  %02X", a);
-	mvsdldbg_printf(96, 2, "X:  %02X", x);
-	mvsdldbg_printf(96, 3, "Y:  %02X", y);
-	mvsdldbg_printf(96, 4, "SP: %02X", s);
-
-        mvsdldbg_printf(96, 5, "%c%c%c%c%c%c",carry ? 'C' : 'c', !(zn & 0xFF) ? 'Z' : 'z', irq_disable ? 'I' : 'i', decimal ? 'D' : 'd', overflow ? 'V' : 'v', !!(zn & 0x180) ? 'N' : 'n');
-
-	//print zeropage
-	for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(72 - 3, 30 + iy, "\xF1%01Xx", iy);
-	for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(72 + (3*ix), 30 - 1, "\xF5x%01X", ix );
-
-	for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(72 + (3*ix), 30 + 16, "\xF5x%01X", ix );
-	for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(72 + (16*3), 30 + iy, "\xF1%01Xx", iy);
-
-	for (int iy = 0; iy < 16; iy++)
-		for (int ix = 0; ix < 16; ix++)
-			mvsdldbg_printf(72 + (3*ix), 30 + iy, "%c%02X", ((ix+iy)%2 ? 0xF3 : 0xF4) , ram[iy * 16 + ix] );
-
-	}
-
-    if (debug_mode == RUN) {
-        if ((n_breakpoints_set > 0 && breakpoint_at[pc]) || keys[SDL_SCANCODE_F7])
-            debug_mode = SINGLE_STEP;
-        else
-            return;
-    }
-
-    if (debug_mode == SINGLE_STEP || debug_mode == TRACE) {
-        print_instruction(pc);
-
-        if (pending_nmi && pending_irq)
-            puts(" (pending NMI and IRQ)");
-        else if (pending_nmi)
-            puts(" (pending NMI)");
-        else if (pending_irq)
-            puts(" (pending IRQ)");
-        else
-            putchar('\n');
-
-        if (debug_mode == TRACE) return;
-    }
-
-    // Simple debugger with breakpoints. Only for internal use - does not do
-    // robust argument checking.
-
-    // Prevent audio underflow while running debugger
-    stop_audio_playback();
-
-    for (;;) {
-        draw_frame();
-	char arg[80];
-       	int keycode = sdldbg_getchar();
-	//int l = sdl_text_prompt("Debug:", line, 80);
-	//
-	switch(keycode) {
-		case 'b':
-                {
-		    if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
-                        puts("Missing address");
-                        break;
-                    }
-                    unsigned addr;
-                    sscanf(arg, "%x", &addr);
-                    if (addr > 0xFFFF)
-                        puts("Address out of range");
-                    else {
-                        // Increment if setting and cleared
-                        n_breakpoints_set += !breakpoint_at[addr];
-                        breakpoint_at[addr] = true;
-                    }
-                    break;
-                }
-
-                case 'c':
-                    debug_mode = RUN;
-
-                    // Process input events to avoid another <F8> being
-                    // detected immediately
-                    SDL_LockMutex(event_lock);
-                    SDL_PumpEvents();
-                    SDL_UnlockMutex(event_lock);
-
-                    start_audio_playback();
-                    return;
-
-                case 'd':
-                {
-		    if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
-                        puts("Missing address");
-                        break;
-                    }
-                    unsigned addr;
-                    sscanf(arg, "%x", &addr);
-                    if (addr > 0xFFFF)
-                        puts("Address out of range");
-                    else {
-                        // Decrement if clearing and set
-                        n_breakpoints_set -= breakpoint_at[addr];
-                        if (!breakpoint_at[addr])
-                            puts("No breakpoint at address");
-                        breakpoint_at[addr] = false;
-                    }
-                    break;
-                }
-
-                case (KM_SHIFT | 'd'):
-                    for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i) {
-                        if (breakpoint_at[i]) {
-                            printf("Deleted breakpoint at %04X\n", i);
-                            breakpoint_at[i] = false;
-                        }
-                    }
-                    n_breakpoints_set = 0;
-                    break;
-
-                case 'i':
-                    for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i)
-                        if (breakpoint_at[i])
-                            printf("Breakpoint at %04X\n", i);
-                    break;
-
-                case 'q':
-                    end_emulation();
-                    exit_sdl_thread();
-                    return;
-
-                default:
-                    printf("Unknown command '%c'\n", keycode);
-                    break;
-	}
-    }
-}
-#endif // INCLUDE_DEBUGGER
 
 //
 // Initialization and resetting
@@ -1682,10 +1335,7 @@ static void set_cpu_cold_boot_state() {
 
     pal_extra_tick = 5;
 
-#ifdef INCLUDE_DEBUGGER
-    // TODO: Might be better to do this in conjunction with loading a new ROM
-    init_array(breakpoint_at, false);
-#endif
+    reset_debugger();
 }
 
 static void reset_cpu() {

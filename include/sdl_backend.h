@@ -36,16 +36,20 @@ void handle_ui_keys();
 extern SDL_mutex *event_lock;
 extern Uint8 const *keys;
 
+extern bool show_debugger;
+
 int sdldbg_puts(const char* s);
 int mvsdldbg_puts(const char x, const char y,const char* s);
 int sdldbg_printf(const char* format, ...);
 int mvsdldbg_printf(int x, int y, const char* format, ...);
+int sdldbg_move(int x, int y);
+int sdldbg_clear(int width, int height);
 
 #define KM_SHIFT 128
 #define KM_CTRL 256
 #define KM_ALT 512
 
-int sdldbg_getchar(void);
+int sdldbg_getkey(void);
 int sdl_text_prompt(const char* prompt, char* value, int value_sz);
 
 extern Uint8 debug_contents[128*60];
