@@ -178,12 +178,13 @@ void handle_ui_keys() {
 
 	if (keys[SDL_SCANCODE_ESCAPE]) 
 		exit(0);
-
+#ifdef ENABLE_CORRUPTION
 	if (KEY_PRESSED(SDL_SCANCODE_F3)) {
 		corrupt_chance += 0x1000; printf("New corrupt chance is %u\n", corrupt_chance); }
 
 	if (KEY_PRESSED(SDL_SCANCODE_F4)) {
 		corrupt_chance -= 0x1000; printf("New corrupt chance is %u\n", corrupt_chance); }
+#endif
 
 	if (keys[SDL_SCANCODE_LALT] && (KEY_PRESSED(SDL_SCANCODE_D))) {
 		show_debugger = !show_debugger;
@@ -218,7 +219,6 @@ static void process_events_sub(SDL_Event event) {
 				if ((mods & KMOD_ALT)) keycode |= KM_ALT;
 			
 				lastdbgkey = keycode;	
-				//dbg_kbdinput_cb(event.type == SDL_KEYDOWN, keycode);
 			}
 			break;
 		case SDL_WINDOWEVENT:
@@ -365,7 +365,7 @@ void init_sdl() {
 					SDL_WINDOW_RESIZABLE)),
 			"failed to create window: %s", SDL_GetError());
 
-	fail_if(!(renderer = SDL_CreateRenderer(screen, -1, 0)),
+	fail_if(!(renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE)),
 			"failed to create rendering context: %s", SDL_GetError());
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
 

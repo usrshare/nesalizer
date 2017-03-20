@@ -46,9 +46,11 @@ void soft_reset()      { pending_event = pending_reset = true; }
 bool pending_irq;
 bool pending_nmi;
 
+#ifdef ENABLE_CORRUPTION
 static bool corrupt_now;
 unsigned int randcorrupt = 0;
 unsigned int corrupt_chance = 0;
+#endif
 
 #ifdef RUN_TESTS
 // The system is soft-reset when this goes from 1 to 0. Used by test ROMs.
@@ -175,13 +177,8 @@ uint8_t read_mem(uint16_t addr) {
 	return res;
 }
 
-static void write_mem(uint8_t val, uint16_t addr) {
-	// TODO: The write probably takes effect earlier within the CPU cycle than
-	// after the three PPU ticks and the one APU tick
-
-	write_tick();
-
-	cpu_data_bus = val;
+void write_mem_inst(uint8_t val, uint16_t addr) {
+	// this function is used by the debugger to modify memory instantly.
 
 	switch (addr) {
 		case 0x0000 ... 0x1FFF: ram[addr & 0x7FF] = val;      break;
@@ -218,7 +215,6 @@ static void write_mem(uint8_t val, uint16_t addr) {
 
 		case 0x6000 ... 0x7FFF:
 			     // SRAM/WRAM/PRG RAM
-
 #ifdef RUN_TESTS
 			     // blargg's test ROMs write the test status to $6000 and a
 			     // corresponding text string to $6004
@@ -230,7 +226,6 @@ static void write_mem(uint8_t val, uint16_t addr) {
 					     ticks_till_reset = 0.15*cpu_clock_rate;
 			     }
 #endif
-
 			     if (wram_6000_page) wram_6000_page[addr & 0x1FFF] = val;
 			     break;
 
@@ -241,6 +236,17 @@ static void write_mem(uint8_t val, uint16_t addr) {
 	// separate functions for common address ranges that trigger mapper
 	// operations
 	mapper_fns.write(val, addr);
+}
+
+static void write_mem(uint8_t val, uint16_t addr) {
+	// TODO: The write probably takes effect earlier within the CPU cycle than
+	// after the three PPU ticks and the one APU tick
+
+	write_tick();
+
+	cpu_data_bus = val;
+
+	write_mem_inst(val,addr);
 }
 
 //
@@ -327,7 +333,11 @@ static uint8_t dec(uint8_t arg) {
 }
 
 static void eor(uint8_t arg) {
+#ifdef ENABLE_CORRUPTION
 	zn = (a ^= (arg ^ (corrupt_now ? (1 << randcorrupt%8) : 0 )));
+#else
+	zn = (a ^= arg);
+#endif
 }
 
 static uint8_t inc(uint8_t arg) {
@@ -344,9 +354,15 @@ static void lax(uint8_t arg) {
 	zn = a = x = arg;
 }
 
+#ifdef ENABLE_CORRUPTION
 static void lda(uint8_t arg) { zn = a = (arg ^ (corrupt_now ? (1 << randcorrupt%8) : 0 )); }
 static void ldx(uint8_t arg) { zn = x = (arg ^ (corrupt_now ? (1 << randcorrupt%8) : 0 )); }
 static void ldy(uint8_t arg) { zn = y = (arg ^ (corrupt_now ? (1 << randcorrupt%8) : 0 )); }
+#else
+static void lda(uint8_t arg) { zn = a = arg; }
+static void ldx(uint8_t arg) { zn = x = arg; }
+static void ldy(uint8_t arg) { zn = y = arg; }
+#endif
 
 static uint8_t lsr(uint8_t arg) {
 	carry = arg & 1;
@@ -420,7 +436,12 @@ static void poll_for_interrupt();
 
 static void branch_if(bool cond) {
 	++pc;
-	if (cond != corrupt_now) {
+#ifdef ENABLE_CORRUPTION
+	if (cond != corrupt_now)
+#else
+	if (cond)
+#endif
+	{
 		read_mem(pc); // Dummy read
 		// TODO: Unsafe unsigned->signed conversion - likely to work in
 		// practice
@@ -862,9 +883,12 @@ void run() {
 			// emulation seems to account for less than 5% of the runtime though,
 			// so it might not be worth uglifying the code for
 
-
+#ifdef ENABLE_CORRUPTION
+			if (corrupt_chance) {
 			randcorrupt = (unsigned int)rand();
-			corrupt_now = (randcorrupt < corrupt_chance);
+			corrupt_now = ((unsigned int)rand() < corrupt_chance);
+			} else {randcorrupt = 0; corrupt_chance = 0;}
+#endif
 
 			switch (opcode) {
 
@@ -922,11 +946,19 @@ void run() {
 				case ROL_ACC: a = rol(a); break;
 				case ROR_ACC: a = ror(a); break;
 
+#ifdef ENABLE_CORRUPTION
 				case CLC: carry       = false ^ corrupt_now; break;
+#else
+				case CLC: carry       = false; break;
+#endif
 				case CLD: decimal     = false; break;
 				case CLI: irq_disable = false; break;
 				case CLV: overflow    = false; break;
+#ifdef ENABLE_CORRUPTION
 				case SEC: carry       = true ^ corrupt_now; break;
+#else
+				case SEC: carry       = true; break;
+#endif
 				case SED: decimal     = true;  break;
 				case SEI: irq_disable = true;  break;
 
@@ -1295,9 +1327,14 @@ void run() {
 
 				case KI0: case KI1: case KI2: case KI3: case KI4: case KI5:
 				case KI6: case KI7: case KI8: case KI9: case K10: case K11:
+#ifdef ENABLE_CORRUPTION
 					  if (!corrupt_chance) { //the user wants corruptions, not resettions.
+#endif
 						  reset_cpu(); 
-						  puts("KIL instruction executed, system hung. Resetting."); }
+						  puts("KIL instruction executed, system hung. Resetting.");
+#ifdef ENABLE_CORRUPTION
+					  }
+#endif
 					  //end_emulation();
 					  //exit_sdl_thread();
 			}
@@ -1319,7 +1356,9 @@ void run() {
 static void set_cpu_cold_boot_state() {
 	init_array(ram, (uint8_t)0xFF);
 	cpu_data_bus = 0;
+#ifdef ENABLE_CORRUPTION
 	corrupt_chance = 0;
+#endif
 
 	// s is later decremented to 0xFD during the reset operation
 	a = s = x = y = 0;

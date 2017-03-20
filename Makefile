@@ -13,7 +13,7 @@ ifeq ($(origin CC), default)
   CC              = gcc
 endif
 # Extra flags passed during compilation and linking
-EXTRA             := -Wno-write-strings -Wno-suggest-attribute=format 
+EXTRA             :=  
 EXTRA_LINK        := 
 # "debug", "release", or "release-debug". "release-debug" adds debugging
 # information in addition to optimizing.
@@ -22,6 +22,8 @@ CONF              := release-debug
 RECORD_MOVIE      = 0
 # If "1", passes -rdynamic to add symbols for backtraces
 BACKTRACE_SUPPORT = 1
+# If "1", adds the corruption mechanic.
+ENABLE_CORRUPTION = 0
 # If "1", allows to rewind time (very consuming)
 INCLUDE_REWIND = 0
 # If "1", configures for automatic test ROM running
@@ -79,7 +81,7 @@ endif
 optimizations += -msse3 -flto -fno-exceptions -DNDEBUG
 
 warnings = -Wall -Wextra -Wdisabled-optimization -Wmissing-format-attribute \
-  -Wno-switch -Wredundant-decls -Wuninitialized
+  -Wno-switch -Wredundant-decls -Wuninitialized -Wno-write-strings -Wno-suggest-attribute=format
 
 ifeq ($(is_clang),0)
     # Not supported on Clang
@@ -117,6 +119,10 @@ endif
 ifeq ($(BACKTRACE_SUPPORT),1)
     # No -rdynamic support in older Clang versions. This is equivalent.
     link_flags += -Wl,-export-dynamic
+endif
+
+ifeq ($(ENABLE_CORRUPTION),1)
+    compile_flags += -DENABLE_CORRUPTION
 endif
 
 ifeq ($(INCLUDE_REWIND),1)

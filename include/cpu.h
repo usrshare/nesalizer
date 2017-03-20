@@ -2,7 +2,9 @@
 //
 // http://wiki.nesdev.com/w/index.php/CPU
 
+#ifdef ENABLE_CORRUPTION
 extern unsigned int corrupt_chance;
+#endif
 
 // Current CPU read/write state. Needed to get the timing for APU DMC sample
 // loading right (tested by the sprdma_and_dmc_dma tests).
@@ -21,6 +23,7 @@ void tick();
 // Also used outside the CPU core to load DMC samples - hence the external
 // linkage
 uint8_t read_mem(uint16_t addr);
+void write_mem_inst(uint8_t val, uint16_t addr); //debugger?
 
 // Interrupt source status
 void set_nmi(bool s);

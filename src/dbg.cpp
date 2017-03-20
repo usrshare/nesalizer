@@ -5,15 +5,18 @@
 #include "mapper.h"
 #include "sdl_backend.h"
 
-static enum { RUN, SINGLE_STEP, TRACE, NEXT_STEP } debug_mode;// = SINGLE_STEP;
-static int cursor_cpu = -1;
-static int cursor_ram = 0;
+static enum { RUN, SINGLE_STEP, NEXT_STEP } debug_mode;// = SINGLE_STEP;
+static bool debugger_on = false;
+
+static enum { DV_CPU, DV_MEM, DV_COUNT } debug_view;
+
+static uint32_t cursor_cpu = 0x8000;
+static uint32_t cursor_mem = 0;
 
 int set_debugger_vis(bool vis) {
 	if (vis) {
-		if (cursor_cpu == -1) cursor_cpu = pc;
+		if (!debugger_on) cursor_cpu = pc;
 	}else {
-		cursor_cpu = -1;
 	}
 
 	return 0;
@@ -344,16 +347,16 @@ needs_second_operand:
 	}
 }
 
-int find_lookback(int addr, int* instr_c) {
+uint16_t find_lookback(uint16_t addr, int* instr_c) {
 	//find how many bytes one has to look back to discover (instr_c) valid 6502 instructions.
 
-	int test_addr = addr;
-	int last_addr = addr;
+	uint16_t test_addr = addr;
+	uint16_t last_addr = addr;
 
 	int instr_found = 0;
 
-	int prev_addr = addr;
-	int prev_instr = 0;
+	uint16_t prev_addr = addr;
+	uint16_t prev_instr = 0;
 
 	do {
 		instr_found = 0;
@@ -367,18 +370,18 @@ int find_lookback(int addr, int* instr_c) {
 		if ((prev_addr == last_addr) && (instr_found > prev_instr) && (instr_found >= (*instr_c))) break; 
 		prev_addr = last_addr; prev_instr = instr_found;
 
-	} while ( (test_addr > 0) && ((last_addr != addr) || (instr_found < *instr_c)) );
+	} while ( ((last_addr != addr) || (instr_found < *instr_c)) );
 
 	*instr_c = instr_found;
 	return test_addr;
 }
 
-int find_forward(int addr, int* instr_c) {
+uint16_t find_forward(uint16_t addr, int* instr_c) {
 
-	int test_addr = addr;
+	uint16_t test_addr = addr;
 	int i=0;
 
-	while ((i < (*instr_c)) && (test_addr <= 0xFFFF)) {
+	while ((i < (*instr_c))) {
 
 		test_addr += instr_length(read_without_side_effects(test_addr));
 		i++;
@@ -411,6 +414,23 @@ static void dbg_kbdinput(int keycode) {
 	memset(arg,0,80);
 
 	switch(keycode) {
+
+		case ( KM_SHIFT | SDLK_UP): {
+						    cursor_mem -= 0x20;
+						    break;
+					    }
+		case ( KM_SHIFT | SDLK_DOWN): {
+						      cursor_mem += 0x20;
+						      break;
+					      }
+		case ( KM_SHIFT | SDLK_PAGEUP): {
+							cursor_mem -= 0x100;
+							break;
+						}
+		case ( KM_SHIFT | SDLK_PAGEDOWN): {
+							  cursor_mem += 0x100;
+							  break;
+						  }
 
 		case SDLK_UP: {
 				      int ib = 1;
@@ -447,61 +467,72 @@ static void dbg_kbdinput(int keycode) {
 				}
 				break;
 		case (KM_SHIFT | 's'):	{
-					// "step over" by installing a breakpoint on the instruction
-					// next to the one at PC
-					if (debug_mode == SINGLE_STEP) debug_mode = RUN;
-					int f=1;
-					breakpoint_set(find_forward(pc,&f));
-				}
+						// "step over" by installing a breakpoint on the instruction
+						// next to the one at PC
+						if (debug_mode == SINGLE_STEP) debug_mode = RUN;
+						int f=1;
+						breakpoint_set(find_forward(pc,&f));
+					}
 					break;
 		case 'b':
-				{
-					if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
-						puts("Missing address");
+					{
+						if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
+							puts("Missing address");
+							break;
+						}
+						unsigned addr;
+						sscanf(arg, "%x", &addr);
+						breakpoint_set(addr);
 						break;
 					}
-					unsigned addr;
-					sscanf(arg, "%x", &addr);
-					breakpoint_set(addr);
-					break;
-				}
 
-				break;
+					break;
 		case 'd':
-				{
-					if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
-						puts("Missing address");
+					{
+						if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
+							puts("Missing address");
+							break;
+						}
+						unsigned addr;
+						sscanf(arg, "%x", &addr);
+						breakpoint_remove(addr);
 						break;
 					}
-					unsigned addr;
-					sscanf(arg, "%x", &addr);
-					breakpoint_remove(addr);
-					break;
-				}
 		case ' ':
-				{
-					breakpoint_toggle(cursor_cpu);
-				}
-				break;
-		case (KM_SHIFT | 'd'):
-				for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i) {
-					if (breakpoint_at[i]) {
-						printf("Deleted breakpoint at %04X\n", i);
-						breakpoint_at[i] = false;
+					{
+						breakpoint_toggle(cursor_cpu);
 					}
-				}
-				n_breakpoints_set = 0;
-				break;
+					break;
+		case (KM_SHIFT | 'd'):
+					for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i) {
+						if (breakpoint_at[i]) {
+							printf("Deleted breakpoint at %04X\n", i);
+							breakpoint_at[i] = false;
+						}
+					}
+					n_breakpoints_set = 0;
+					break;
 
 		case 'i':
-				for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i)
-					if (breakpoint_at[i])
-						printf("Breakpoint at %04X\n", i);
-				break;
+					for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i)
+						if (breakpoint_at[i])
+							printf("Breakpoint at %04X\n", i);
+					break;
 		case 'r':
-				if (debug_mode == SINGLE_STEP) debug_mode = RUN;
+					if (debug_mode == SINGLE_STEP) debug_mode = RUN;
+		case 'p':		{ //poke
+						if (!sdl_text_prompt("Poke address and value:", arg, 80)) {
+							break;
+						}
+						uint16_t addr;
+						uint8_t val;
+						if (sscanf(arg,"%hx %hhx",&addr,&val) == 2) {
+							write_mem_inst(val,addr);
+						}
+					}
+					break;
 		default:
-				break;
+					break;
 	}
 }
 
@@ -529,7 +560,7 @@ int dbg_log_instruction() {
 		mvsdldbg_printf(96, 4, "\361SP: \360%02X", s);
 
 		mvsdldbg_printf(96, 5, "\362%c%c%c%c%c%c\360",carry ? 'C' : 'c', !(zn & 0xFF) ? 'Z' : 'z', irq_disable ? 'I' : 'i', decimal ? 'D' : 'd', overflow ? 'V' : 'v', !!(zn & 0x180) ? 'N' : 'n');
-		
+
 		if (pending_nmi && pending_irq)
 			mvsdldbg_puts(96,6," (pending NMI and IRQ)");
 		else if (pending_nmi)
@@ -543,7 +574,7 @@ int dbg_log_instruction() {
 		sdldbg_clear(64, 50);   
 
 		int instr_f = 24;
-		int addr_lb = find_lookback(cursor_cpu >= 0 ? cursor_cpu : pc, &instr_f);
+		uint16_t addr_lb = find_lookback(cursor_cpu, &instr_f);
 
 		sdldbg_move(0, 24 - instr_f);
 
@@ -571,17 +602,17 @@ int dbg_log_instruction() {
 
 		for (int iy = 0; iy < 8; iy++) {
 
-			mvsdldbg_printf(23,51+iy,"\365%04X: \360",cursor_ram + 32*iy);
+			mvsdldbg_printf(23,51+iy,"\365%04X: \360",cursor_mem + 32*iy);
 
 			for (int ix=0; ix<32; ix++) {
-				sdldbg_printf("%c%02X", ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ), read_without_side_effects(cursor_ram + (32*iy) + ix) );
+				sdldbg_printf("%c%02X", ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ), read_without_side_effects(cursor_mem + (32*iy) + ix) );
 				if ((ix & 15) == 15) sdldbg_puts(" ");
 			}
 
 			sdldbg_puts("\360");
 
 			for (int ix=0; ix<32; ix++) {
-				uint8_t v = read_without_side_effects(cursor_ram + (32*iy) + ix);
+				uint8_t v = read_without_side_effects(cursor_mem + (32*iy) + ix);
 				sdldbg_printf("%c", ((v >= 32) && (v < 128)) ? v : '.');
 			}
 		}
