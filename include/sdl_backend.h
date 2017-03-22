@@ -52,5 +52,12 @@ int sdldbg_getkey(void);
 int sdldbg_getkey_nonblock(void);
 int sdl_text_prompt(const char* prompt, char* value, size_t value_sz);
 
-extern Uint8 debug_contents[128*60];
-extern Uint8 debug_colors[128*60];
+#define DBG_SCRWIDTH 624
+#define DBG_SCRHEIGHT 480
+#define DBG_CHARWIDTH 6
+#define DBG_CHARHEIGHT 8
+#define DBG_COLUMNS (DBG_SCRWIDTH / DBG_CHARWIDTH)
+#define DBG_ROWS (DBG_SCRHEIGHT / DBG_CHARHEIGHT)
+
+extern Uint8 debug_contents[DBG_COLUMNS * DBG_ROWS];
+extern Uint8 debug_colors[DBG_COLUMNS * DBG_ROWS];

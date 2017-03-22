@@ -73,8 +73,8 @@ static bool frame_available;
 
 bool show_debugger;
 
-Uint8 debug_contents[128 * 60]; //640x480 / 5x8 font
-Uint8 debug_colors[128*60];
+Uint8 debug_contents[DBG_COLUMNS * DBG_ROWS];
+Uint8 debug_colors[DBG_COLUMNS*DBG_ROWS];
 Uint8 debug_cur_color = 0, debug_cur_x=0, debug_cur_y = 0;
 
 static const Uint32 dbgpal[16] = {
@@ -264,30 +264,30 @@ static void draw_actual_frame(void) {
 
 		if (show_debugger) {
 			SDL_Rect dstrect;
-			dstrect.w = 640; dstrect.h = 480;
-			dstrect.x = win_w/2 - 320; dstrect.y = win_h/2 - 240;
+			dstrect.w = DBG_SCRWIDTH; dstrect.h = DBG_SCRHEIGHT;
+			dstrect.x = win_w/2 - DBG_SCRWIDTH/2; dstrect.y = win_h/2 - DBG_SCRHEIGHT/2;
 
 			SDL_SetRenderDrawColor(renderer,0,0,0,128);
 			SDL_SetRenderDrawBlendMode(renderer,SDL_BLENDMODE_BLEND);
 			SDL_RenderFillRect(renderer, &dstrect);
 
-			SDL_Rect charrect; charrect.w = 5; charrect.h = 8;
-			SDL_Rect dbgrect; dbgrect.w = 5; dbgrect.h = 8;
+			SDL_Rect charrect; charrect.w = DBG_CHARWIDTH; charrect.h = DBG_CHARHEIGHT;
+			SDL_Rect dbgrect; dbgrect.w = DBG_CHARWIDTH; dbgrect.h = DBG_CHARHEIGHT;
 
 			int lastcolor = -1;
 
-			for (int iy=0; iy < 60; iy++) {
-				dbgrect.y = dstrect.y + (iy*8);
-				for (int ix=0; ix < 128; ix++) {
-					dbgrect.x = dstrect.x + (ix*5);
-					Uint8 dbgcont = debug_contents[iy*128+ix];
+			for (int iy=0; iy < DBG_ROWS; iy++) {
+				dbgrect.y = dstrect.y + (iy*DBG_CHARHEIGHT);
+				for (int ix=0; ix < DBG_COLUMNS; ix++) {
+					dbgrect.x = dstrect.x + (ix*DBG_CHARWIDTH);
+					Uint8 dbgcont = debug_contents[iy*DBG_COLUMNS+ix];
 					if (dbgcont == 0) dbgcont = 32;
 					if (dbgcont >= 32) {
-						charrect.x = ((debug_contents[iy*128+ix] - 32) % 16) * 5;
-						charrect.y = ((debug_contents[iy*128+ix] - 32) / 16) * 8;
-						if (debug_colors[iy*128+ix] != lastcolor) {
+						charrect.x = ((debug_contents[iy*DBG_COLUMNS+ix] - 32) % 16) * DBG_CHARWIDTH;
+						charrect.y = ((debug_contents[iy*DBG_COLUMNS+ix] - 32) / 16) * DBG_CHARHEIGHT;
+						if (debug_colors[iy*DBG_COLUMNS+ix] != lastcolor) {
 
-							int curcol = debug_colors[iy*128+ix];
+							int curcol = debug_colors[iy*DBG_COLUMNS+ix];
 
 							SDL_SetTextureColorMod(dbg_font, dbgpal[curcol] >> 16, (dbgpal[curcol] >> 8) & 0xFF, dbgpal[curcol] & 0xFF);
 							lastcolor = curcol;
@@ -452,8 +452,10 @@ void init_sdl() {
 }
 
 void sdldbg_scroll(void) {
-	memcpy(debug_contents, debug_contents + 128, 128*59);
-	memcpy(debug_colors, debug_colors + 128, 128*59);
+	memcpy(debug_contents, debug_contents + DBG_COLUMNS, DBG_COLUMNS*(DBG_ROWS-1));
+	memcpy(debug_colors, debug_colors + DBG_COLUMNS, DBG_COLUMNS*(DBG_ROWS-1));
+	memset(debug_contents + DBG_COLUMNS*(DBG_ROWS-1), 0, DBG_COLUMNS);
+	memset(debug_colors + DBG_COLUMNS*(DBG_ROWS-1), 0, DBG_COLUMNS);
 }
 
 int sdldbg_puts(const char* s) {
@@ -463,8 +465,8 @@ int sdldbg_puts(const char* s) {
 	while (*curchar) {
 
 		if ((*curchar >= 32) && (*curchar < 128)) {
-			debug_contents[debug_cur_y * 128 + debug_cur_x] = *curchar;
-			debug_colors[debug_cur_y * 128 + debug_cur_x] = debug_cur_color;
+			debug_contents[debug_cur_y * DBG_COLUMNS + debug_cur_x] = *curchar;
+			debug_colors[debug_cur_y * DBG_COLUMNS + debug_cur_x] = debug_cur_color;
 			debug_cur_x++;
 		}
 		if ((*curchar == 10) || (*curchar == 13)) {
@@ -476,8 +478,8 @@ int sdldbg_puts(const char* s) {
 		}
 
 		curchar++;
-		if (debug_cur_x >= 128) {debug_cur_x = 0; debug_cur_y++;}
-		if (debug_cur_y >= 60) {sdldbg_scroll(); debug_cur_y = 59;}
+		if (debug_cur_x >= DBG_COLUMNS) {debug_cur_x = 0; debug_cur_y++;}
+		if (debug_cur_y >= DBG_ROWS) {sdldbg_scroll(); debug_cur_y = (DBG_ROWS-1);}
 	}
 	return 0;
 }
@@ -520,8 +522,8 @@ int sdldbg_printf(const char* format, ...) {
 
 int sdldbg_clear(int width, int height) {
 	for (int iy = debug_cur_y; iy < (debug_cur_y + height); iy++) {
-		memset(debug_contents + iy*128 + debug_cur_x, 0, width);
-		memset(debug_colors + iy*128 + debug_cur_x, 0, width);
+		memset(debug_contents + iy*DBG_COLUMNS + debug_cur_x, 0, width);
+		memset(debug_colors + iy*DBG_COLUMNS + debug_cur_x, 0, width);
 	}
 	return 0;
 }
@@ -561,11 +563,11 @@ int sdldbg_getkey(void) {
     	int pb = audio_pause(1);
 	show_debugger = 1;
 
-	Uint8 bk_contents[128], bk_colors[128];
-	memcpy(bk_contents, debug_contents + (128 * 59), 128);
-	memcpy(bk_colors, debug_colors + (128 * 59), 128);
+	Uint8 bk_contents[DBG_COLUMNS], bk_colors[DBG_COLUMNS];
+	memcpy(bk_contents, debug_contents + (DBG_COLUMNS * (DBG_ROWS-1)), DBG_COLUMNS);
+	memcpy(bk_colors, debug_colors + (DBG_COLUMNS * (DBG_ROWS-1)), DBG_COLUMNS);
 
-	mvsdldbg_puts(0, 59, " \xF1?\xF0 ");
+	mvsdldbg_puts(0, (DBG_ROWS-1), " \xF1?\xF0 ");
 
 	int keycode = 0;
 
@@ -595,8 +597,8 @@ int sdldbg_getkey(void) {
 		}
 	}
 
-	memcpy(debug_contents + (128 * 59), bk_contents, 128);
-	memcpy(debug_colors + (128 * 59), bk_colors, 128);
+	memcpy(debug_contents + (DBG_COLUMNS * (DBG_ROWS-1)), bk_contents, DBG_COLUMNS);
+	memcpy(debug_colors + (DBG_COLUMNS * (DBG_ROWS-1)), bk_colors, DBG_COLUMNS);
 	audio_pause(pb);
 	return keycode;
 }
@@ -606,15 +608,15 @@ int sdl_text_prompt(const char* prompt, char* value, size_t value_sz) {
     	int pb = audio_pause(1);
 	show_debugger = 1;
 
-	Uint8 bk_contents[128*2], bk_colors[128*2];
-	memcpy(bk_contents, debug_contents + (128 * 58), (128*2));
-	memcpy(bk_colors, debug_colors + (128 * 58), (128*2));
+	Uint8 bk_contents[DBG_COLUMNS*2], bk_colors[DBG_COLUMNS*2];
+	memcpy(bk_contents, debug_contents + (DBG_COLUMNS * (DBG_ROWS-2)), (DBG_COLUMNS*2));
+	memcpy(bk_colors, debug_colors + (DBG_COLUMNS * (DBG_ROWS-2)), (DBG_COLUMNS*2));
 
-	memset(debug_contents + (128*58), 0, 128*2);
-	memset(debug_colors + (128*58), 0, 128*2);
+	memset(debug_contents + (DBG_COLUMNS*(DBG_ROWS-2)), 0, DBG_COLUMNS*2);
+	memset(debug_colors + (DBG_COLUMNS*(DBG_ROWS-2)), 0, DBG_COLUMNS*2);
 
-	mvsdldbg_puts(0, 58, prompt);
-	mvsdldbg_puts(0, 59, " \xF3>\xF0 ");
+	mvsdldbg_puts(0, (DBG_ROWS-2), prompt);
+	mvsdldbg_puts(0, (DBG_ROWS-1), " \xF3>\xF0 ");
 
 	char new_textinput[value_sz];
 	strcpy(new_textinput,value);
@@ -625,7 +627,7 @@ int sdl_text_prompt(const char* prompt, char* value, size_t value_sz) {
 	ignore_events = 1;
 	while (loop) {
 
-		mvsdldbg_printf(3, 59, "%s\x7F ", new_textinput);
+		mvsdldbg_printf(3, (DBG_ROWS-1), "%s\x7F ", new_textinput);
 		draw_frame();
 
 		SDL_Event event;
@@ -670,8 +672,8 @@ int sdl_text_prompt(const char* prompt, char* value, size_t value_sz) {
 
 	if (success) strncpy(value,new_textinput,value_sz);
 
-	memcpy(debug_contents + (128 * 58),bk_contents, (128*2));
-	memcpy(debug_colors + (128 * 58),bk_colors, (128*2));
+	memcpy(debug_contents + (DBG_COLUMNS * (DBG_ROWS-2)),bk_contents, (DBG_COLUMNS*2));
+	memcpy(debug_colors + (DBG_COLUMNS * (DBG_ROWS-2)),bk_colors, (DBG_COLUMNS*2));
 	audio_pause(pb);
 	return success;
 }

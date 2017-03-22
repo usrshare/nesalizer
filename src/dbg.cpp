@@ -8,9 +8,15 @@
 static enum { RUN, SINGLE_STEP, NEXT_STEP } debug_mode;// = SINGLE_STEP;
 static bool debugger_on = false;
 
-static enum { DV_CPU, DV_MEM, DV_COUNT } debug_view;
+#define DV_CPU 0
+#define DV_MEM 1
+#define DV_COUNT 2
+
+static int curview = DV_CPU;
 
 static uint32_t cursor_cpu = 0x8000;
+static uint32_t scroll_mem = 0;
+
 static uint32_t cursor_mem = 0;
 
 int set_debugger_vis(bool vis) {
@@ -414,21 +420,27 @@ static void dbg_kbdinput(int keycode) {
 	memset(arg,0,80);
 
 	switch(keycode) {
+		case SDLK_TAB:
+			curview = (curview + 1) % DV_COUNT;
+			return;
+	}
+
+	switch(keycode) {
 
 		case ( KM_SHIFT | SDLK_UP): {
-						    cursor_mem -= 0x20;
+						    scroll_mem -= 0x20;
 						    break;
 					    }
 		case ( KM_SHIFT | SDLK_DOWN): {
-						      cursor_mem += 0x20;
+						      scroll_mem += 0x20;
 						      break;
 					      }
 		case ( KM_SHIFT | SDLK_PAGEUP): {
-							cursor_mem -= 0x100;
+							scroll_mem -= 0x100;
 							break;
 						}
 		case ( KM_SHIFT | SDLK_PAGEDOWN): {
-							  cursor_mem += 0x100;
+							  scroll_mem += 0x100;
 							  break;
 						  }
 
@@ -476,7 +488,7 @@ static void dbg_kbdinput(int keycode) {
 					break;
 		case 'b':
 					{
-						if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
+						if (!sdl_text_prompt("Breakpoint address (add):",arg,80)) {
 							puts("Missing address");
 							break;
 						}
@@ -487,9 +499,9 @@ static void dbg_kbdinput(int keycode) {
 					}
 
 					break;
-		case 'd':
+		case (KM_SHIFT | 'b'):
 					{
-						if (!sdl_text_prompt("Breakpoint address:",arg,80)) {
+						if (!sdl_text_prompt("Breakpoint address (delete):",arg,80)) {
 							puts("Missing address");
 							break;
 						}
@@ -503,7 +515,8 @@ static void dbg_kbdinput(int keycode) {
 						breakpoint_toggle(cursor_cpu);
 					}
 					break;
-		case (KM_SHIFT | 'd'):
+		case (KM_CTRL | 'b'):
+					//delete all breakpoints.
 					for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i) {
 						if (breakpoint_at[i]) {
 							printf("Deleted breakpoint at %04X\n", i);
@@ -520,6 +533,7 @@ static void dbg_kbdinput(int keycode) {
 					break;
 		case 'r':
 					if (debug_mode == SINGLE_STEP) debug_mode = RUN;
+					break;
 		case 'p':		{ //poke
 						if (!sdl_text_prompt("Poke address and value:", arg, 80)) {
 							break;
@@ -528,6 +542,55 @@ static void dbg_kbdinput(int keycode) {
 						uint8_t val;
 						if (sscanf(arg,"%hx %hhx",&addr,&val) == 2) {
 							write_mem_inst(val,addr);
+						}
+					}
+					break;
+		case 'l':		{ //load data from file
+						if (!sdl_text_prompt("Filename, start addr, end addr:", arg, 80)) {
+							break;
+						}
+						char filename[64];
+						uint16_t addr_st;
+						uint16_t addr_end;
+						if (sscanf(arg,"%64s %hx %hx",filename,&addr_st,&addr_end) == 3) {
+
+							FILE* loadfile = fopen(filename,"rb");
+							if (!loadfile) break;
+
+							uint16_t l = addr_end - addr_st + 1;
+							uint8_t data[l];
+
+							int r = fread(data,l,1,loadfile);
+							if (r!= 1) { printf("Error while loading data.\n"); fclose(loadfile); break; }
+
+							for (int i=0; i < l; i++)
+								write_mem_inst(data[i],addr_st + i);
+						
+						}
+					}
+					break;
+		case 'd':		{ //dump data into file
+						if (!sdl_text_prompt("Filename, start addr, end addr:", arg, 80)) {
+							break;
+						}
+						char filename[64];
+						uint16_t addr_st;
+						uint16_t addr_end;
+						if (sscanf(arg,"%64s %hx %hx",filename,&addr_st,&addr_end) == 3) {
+
+							FILE* dumpfile = fopen(filename,"wb");
+							if (!dumpfile) break;
+
+							uint16_t l = addr_end - addr_st + 1;
+							uint8_t data[l];
+							
+							for (int i=0; i < l; i++)
+								data[i] = read_without_side_effects(addr_st + i);
+
+							int r = fwrite(data,l,1,dumpfile);
+							if (r!= 1) { printf("Error while saving data.\n"); fclose(dumpfile); break; }
+
+						
 						}
 					}
 					break;
@@ -553,22 +616,22 @@ int dbg_log_instruction() {
 	if ( (show_debugger) && ( (debug_mode == SINGLE_STEP) || (frame_offset == 0)) ) {
 		//every frame, output new debugger values
 
-		mvsdldbg_printf(96, 0, "\361PC: \360%04X", pc);
-		mvsdldbg_printf(96, 1, "\361A:  \360%02X", a);
-		mvsdldbg_printf(96, 2, "\361X:  \360%02X", x);
-		mvsdldbg_printf(96, 3, "\361Y:  \360%02X", y);
-		mvsdldbg_printf(96, 4, "\361SP: \360%02X", s);
+		mvsdldbg_printf(86, 0, "\361PC: \360%04X", pc);
+		mvsdldbg_printf(86, 1, "\361A:  \360%02X", a);
+		mvsdldbg_printf(86, 2, "\361X:  \360%02X", x);
+		mvsdldbg_printf(86, 3, "\361Y:  \360%02X", y);
+		mvsdldbg_printf(86, 4, "\361SP: \360%02X", s);
 
-		mvsdldbg_printf(96, 5, "\362%c%c%c%c%c%c\360",carry ? 'C' : 'c', !(zn & 0xFF) ? 'Z' : 'z', irq_disable ? 'I' : 'i', decimal ? 'D' : 'd', overflow ? 'V' : 'v', !!(zn & 0x180) ? 'N' : 'n');
+		mvsdldbg_printf(86, 5, "\362%c%c%c%c%c%c\360",carry ? 'C' : 'c', !(zn & 0xFF) ? 'Z' : 'z', irq_disable ? 'I' : 'i', decimal ? 'D' : 'd', overflow ? 'V' : 'v', !!(zn & 0x180) ? 'N' : 'n');
 
 		if (pending_nmi && pending_irq)
-			mvsdldbg_puts(96,6," (pending NMI and IRQ)");
+			mvsdldbg_puts(86,6," (pending NMI and IRQ)");
 		else if (pending_nmi)
-			mvsdldbg_puts(96,6," (pending NMI)");
+			mvsdldbg_puts(86,6," (pending NMI)");
 		else if (pending_irq)
-			mvsdldbg_puts(96,6," (pending IRQ)");
+			mvsdldbg_puts(86,6," (pending IRQ)");
 		else
-			mvsdldbg_clear(96,6,24,1);
+			mvsdldbg_clear(86,6,24,1);
 
 		sdldbg_move(0,0);
 		sdldbg_clear(64, 50);   
@@ -589,30 +652,30 @@ int dbg_log_instruction() {
 		}
 
 		//print zeropage
-		for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(77 - 3, 33 + iy, "\xF1%01Xx", iy);
-		for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(77 + (3*ix), 33 - 1, "\xF5x%01X", ix );
-		for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(77 + (3*ix), 33 + 16, "\xF5x%01X", ix );
-		for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(77 + (16*3), 33 + iy, "\xF1%01Xx", iy);
+		for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(49 - 3, 33 + iy, "\xF1%01Xx", iy);
+		for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(49 + (3*ix), 33 - 1, "\xF5x%01X", ix );
+		for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(49 + (3*ix), 33 + 16, "\xF5x%01X", ix );
+		for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(49 + (16*3), 33 + iy, "\xF1%01Xx", iy);
 
 		for (int iy = 0; iy < 16; iy++)
 			for (int ix = 0; ix < 16; ix++)
-				mvsdldbg_printf(77 + (3*ix), 33 + iy, "%c%02X", ((ix+iy)%2 ? 0xF3 : 0xF4) , ram[iy * 16 + ix] );
+				mvsdldbg_printf(49 + (3*ix), 33 + iy, "%c%02X", ((ix+iy)%2 ? 0xF3 : 0xF4) , ram[iy * 16 + ix] );
 
 		//print RAM
 
 		for (int iy = 0; iy < 8; iy++) {
 
-			mvsdldbg_printf(23,51+iy,"\365%04X: \360",cursor_mem + 32*iy);
+			mvsdldbg_printf(0,51+iy,"\365%04X: \360",scroll_mem + 32*iy);
 
 			for (int ix=0; ix<32; ix++) {
-				sdldbg_printf("%c%02X", ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ), read_without_side_effects(cursor_mem + (32*iy) + ix) );
+				sdldbg_printf("%c%02X", ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ), read_without_side_effects(scroll_mem + (32*iy) + ix) );
 				if ((ix & 15) == 15) sdldbg_puts(" ");
 			}
 
 			sdldbg_puts("\360");
 
 			for (int ix=0; ix<32; ix++) {
-				uint8_t v = read_without_side_effects(cursor_mem + (32*iy) + ix);
+				uint8_t v = read_without_side_effects(scroll_mem + (32*iy) + ix);
 				sdldbg_printf("%c", ((v >= 32) && (v < 128)) ? v : '.');
 			}
 		}
