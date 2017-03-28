@@ -86,19 +86,19 @@ static char const *decode_addr(uint16_t addr) {
 
 // TODO: Tableify
 
-#define INS_IMP(name)    case name         : sdldbg_puts (#name"         \n");                            break;
-#define INS_ACC(name)    case name##_ACC   : sdldbg_puts (#name" A       \n");                            break;
-#define INS_IMM(name)    case name##_IMM   : sdldbg_printf(#name" #$%02X    \n", op_1);                            break;
-#define INS_ZERO(name)   case name##_ZERO  : sdldbg_printf(#name" $%02X     \n", op_1);                            break;
-#define INS_ZERO_X(name) case name##_ZERO_X: sdldbg_printf(#name" $%02X,X   \n", op_1);                            break;
-#define INS_ZERO_Y(name) case name##_ZERO_Y: sdldbg_printf(#name" $%02X,Y   \n", op_1);                            break;
-#define INS_REL(name)    case name         : sdldbg_printf(#name" $%04X   \n"  , uint16_t(addr + 2 + (int8_t)op_1)); break;
-#define INS_IND_X(name)  case name##_IND_X : sdldbg_printf(#name" ($%02X,X) \n", op_1);                            break;
-#define INS_IND_Y(name)  case name##_IND_Y : sdldbg_printf(#name" ($%02X),Y \n", op_1);                            break;
-#define INS_ABS(name)    case name##_ABS   : sdldbg_printf(#name" %s   \n"  , decode_addr((op_2 << 8) | op_1));    break;
-#define INS_ABS_X(name)  case name##_ABS_X : sdldbg_printf(#name" %s,X \n"  , decode_addr((op_2 << 8) | op_1));    break;
-#define INS_ABS_Y(name)  case name##_ABS_Y : sdldbg_printf(#name" %s,Y \n"  , decode_addr((op_2 << 8) | op_1));    break;
-#define INS_IND(name)    case name##_IND   : sdldbg_printf(#name" (%s) \n"  , decode_addr((op_2 << 8) | op_1));    break;
+#define INS_IMP(name)    case name         : sdldbg_puts (#name"         ");                            break;
+#define INS_ACC(name)    case name##_ACC   : sdldbg_puts (#name" A       ");                            break;
+#define INS_IMM(name)    case name##_IMM   : sdldbg_printf(#name" #$%02X    ", op_1);                            break;
+#define INS_ZERO(name)   case name##_ZERO  : sdldbg_printf(#name" $%02X     ", op_1);                            break;
+#define INS_ZERO_X(name) case name##_ZERO_X: sdldbg_printf(#name" $%02X,X   ", op_1);                            break;
+#define INS_ZERO_Y(name) case name##_ZERO_Y: sdldbg_printf(#name" $%02X,Y   ", op_1);                            break;
+#define INS_REL(name)    case name         : sdldbg_printf(#name" $%04X   "  , uint16_t(addr + 2 + (int8_t)op_1)); break;
+#define INS_IND_X(name)  case name##_IND_X : sdldbg_printf(#name" ($%02X,X) ", op_1);                            break;
+#define INS_IND_Y(name)  case name##_IND_Y : sdldbg_printf(#name" ($%02X),Y ", op_1);                            break;
+#define INS_ABS(name)    case name##_ABS   : sdldbg_printf(#name" %s   "  , decode_addr((op_2 << 8) | op_1));    break;
+#define INS_ABS_X(name)  case name##_ABS_X : sdldbg_printf(#name" %s,X "  , decode_addr((op_2 << 8) | op_1));    break;
+#define INS_ABS_Y(name)  case name##_ABS_Y : sdldbg_printf(#name" %s,Y "  , decode_addr((op_2 << 8) | op_1));    break;
+#define INS_IND(name)    case name##_IND   : sdldbg_printf(#name" (%s) "  , decode_addr((op_2 << 8) | op_1));    break;
 
 static bool     breakpoint_at[0x10000];
 // Optimization to avoid trashing the cache via breakpoint_at lookups when no
@@ -108,6 +108,142 @@ static unsigned n_breakpoints_set;
 int reset_debugger(void) {
 	init_array(breakpoint_at, false);
 	return 0;
+}
+
+enum addr_types {
+	AT_IMP,
+	AT_ACC,
+	AT_IMM,
+	AT_ZP,
+	AT_ZPX,
+	AT_ZPY,
+	AT_REL,
+	AT_INX,
+	AT_INY,
+	AT_ABS,
+	AT_ABX,
+	AT_ABY,
+	AT_IND
+};
+
+enum addr_types instr_addr_type(int opcode) {
+	switch (opcode) {
+		// Implied
+		case BRK: case RTI: case RTS: case PHA: case PHP:
+		case PLA: case PLP: case CLC: case CLD: case CLI:
+		case CLV: case SEC: case SED: case SEI: case DEX:
+		case DEY: case INX: case INY: case NO0: case NO1:
+		case NO2: case NO3: case NO4: case NO5: case NOP:
+		case TAX: case TAY: case TSX: case TXA: case TXS:
+		case TYA:
+
+			// KIL instructions implied_:
+		case KI0: case KI1: case KI2: case KI3: case KI4:
+		case KI5: case KI6: case KI7: case KI8: case KI9:
+		case K10: case K11:
+
+			return AT_IMP;
+
+			// Accumulator
+		case ASL_ACC: case LSR_ACC: case ROL_ACC: case ROR_ACC:
+
+			return AT_ACC;
+
+			// Immediate
+		case ADC_IMM: case ALR_IMM: case AN0_IMM: case AN1_IMM: case AND_IMM:
+		case ARR_IMM: case AXS_IMM: case ATX_IMM: case CMP_IMM: case CPX_IMM:
+		case CPY_IMM: case EOR_IMM: case LDA_IMM: case LDX_IMM: case LDY_IMM:
+		case NO0_IMM: case NO1_IMM: case NO2_IMM: case NO3_IMM: case NO4_IMM:
+		case ORA_IMM: case SB2_IMM: case SBC_IMM: case XAA_IMM:
+
+			return AT_IMM;
+
+			// Zero page
+		case ADC_ZERO: case AND_ZERO: case BIT_ZERO: case CMP_ZERO:
+		case CPX_ZERO: case CPY_ZERO: case DCP_ZERO: case EOR_ZERO:
+		case ISC_ZERO: case LAX_ZERO: case LDA_ZERO: case LDX_ZERO:
+		case LDY_ZERO: case NO0_ZERO: case NO1_ZERO: case NO2_ZERO:
+		case ORA_ZERO: case SBC_ZERO: case SLO_ZERO: case SRE_ZERO:
+		case SAX_ZERO: case ASL_ZERO: case LSR_ZERO: case RLA_ZERO:
+		case RRA_ZERO: case ROL_ZERO: case ROR_ZERO: case INC_ZERO:
+		case DEC_ZERO: case STA_ZERO: case STX_ZERO: case STY_ZERO:
+
+			return AT_ZP;
+
+			// Zero page, X
+		case ADC_ZERO_X: case AND_ZERO_X: case CMP_ZERO_X: case DCP_ZERO_X:
+		case EOR_ZERO_X: case ISC_ZERO_X: case LDA_ZERO_X: case LDY_ZERO_X:
+		case NO0_ZERO_X: case NO1_ZERO_X: case NO2_ZERO_X: case NO3_ZERO_X:
+		case NO4_ZERO_X: case NO5_ZERO_X: case ORA_ZERO_X: case SBC_ZERO_X:
+		case SLO_ZERO_X: case SRE_ZERO_X: case ASL_ZERO_X: case DEC_ZERO_X:
+		case INC_ZERO_X: case LSR_ZERO_X: case RLA_ZERO_X: case RRA_ZERO_X:
+		case ROL_ZERO_X: case ROR_ZERO_X: case STA_ZERO_X: case STY_ZERO_X:
+
+			return AT_ZPX;
+
+			// Zero page, Y
+		case SAX_ZERO_Y: case LAX_ZERO_Y: case LDX_ZERO_Y: case STX_ZERO_Y:
+
+			return AT_ZPY;
+
+			// Relative branch_ instructions:
+		case BCC: case BCS: case BVC: case BVS: case BEQ:
+		case BMI: case BNE: case BPL:
+
+			return AT_REL;
+
+			// Indirect_,X:
+		case ADC_IND_X: case AND_IND_X: case CMP_IND_X: case DCP_IND_X:
+		case EOR_IND_X: case ISC_IND_X: case LAX_IND_X: case LDA_IND_X:
+		case ORA_IND_X: case RLA_IND_X: case RRA_IND_X: case SAX_IND_X:
+		case SBC_IND_X: case SLO_IND_X: case SRE_IND_X: case STA_IND_X:
+
+			return AT_INX;
+
+			// Indirect_:,Y
+		case ADC_IND_Y: case AND_IND_Y: case AXA_IND_Y: case CMP_IND_Y:
+		case DCP_IND_Y: case EOR_IND_Y: case ISC_IND_Y: case LAX_IND_Y:
+		case LDA_IND_Y: case ORA_IND_Y: case RLA_IND_Y: case RRA_IND_Y:
+		case SBC_IND_Y: case SLO_IND_Y: case SRE_IND_Y: case STA_IND_Y:
+
+			return AT_INY;
+
+			// Absolute
+		case JMP_ABS: case JSR_ABS: case ADC_ABS: case AND_ABS: case BIT_ABS:
+		case CMP_ABS: case CPX_ABS: case CPY_ABS: case DCP_ABS: case EOR_ABS:
+		case ISC_ABS: case LAX_ABS: case LDA_ABS: case LDX_ABS: case LDY_ABS:
+		case NOP_ABS: case ORA_ABS: case SBC_ABS: case SLO_ABS: case SRE_ABS:
+		case ASL_ABS: case DEC_ABS: case INC_ABS: case LSR_ABS: case RLA_ABS:
+		case RRA_ABS: case ROL_ABS: case ROR_ABS: case SAX_ABS: case STA_ABS:
+		case STX_ABS: case STY_ABS:
+
+			return AT_ABS;
+
+			// Absolute,X
+		case ADC_ABS_X: case AND_ABS_X: case CMP_ABS_X: case DCP_ABS_X:
+		case EOR_ABS_X: case ISC_ABS_X: case LDA_ABS_X: case LDY_ABS_X:
+		case NO0_ABS_X: case NO1_ABS_X: case NO2_ABS_X: case NO3_ABS_X:
+		case NO4_ABS_X: case NO5_ABS_X: case ORA_ABS_X: case RLA_ABS_X:
+		case RRA_ABS_X: case SAY_ABS_X: case SBC_ABS_X: case SLO_ABS_X:
+		case SRE_ABS_X: case ASL_ABS_X: case DEC_ABS_X: case INC_ABS_X:
+		case LSR_ABS_X: case ROL_ABS_X: case ROR_ABS_X: case STA_ABS_X:
+
+			return AT_ABX;
+
+			// Absolute,Y
+		case ADC_ABS_Y: case AND_ABS_Y: case AXA_ABS_Y: case CMP_ABS_Y:
+		case DCP_ABS_Y: case EOR_ABS_Y: case ISC_ABS_Y: case LAX_ABS_Y:
+		case LAS_ABS_Y: case LDA_ABS_Y: case LDX_ABS_Y: case ORA_ABS_Y:
+		case RLA_ABS_Y: case RRA_ABS_Y: case SBC_ABS_Y: case SLO_ABS_Y:
+		case SRE_ABS_Y: case STA_ABS_Y: case TAS_ABS_Y: case XAS_ABS_Y:
+
+			return AT_ABY;
+
+			// Indirect
+		case JMP_IND: return AT_IND;
+
+		default: return AT_IMP;
+	}
 }
 
 int instr_length(int opcode) {
@@ -255,6 +391,8 @@ static void print_instruction(uint16_t addr) {
 
 		default: goto needs_first_operand;
 	}
+
+
 	return;
 
 needs_first_operand:
@@ -311,7 +449,7 @@ needs_first_operand:
 
 		default: goto needs_second_operand;
 	}
-
+	
 	return;
 
 needs_second_operand:
@@ -425,178 +563,187 @@ static void dbg_kbdinput(int keycode) {
 			return;
 	}
 
-	switch(keycode) {
+	switch (curview) {
+		case DV_CPU: {
+				     switch(keycode) {
 
-		case ( KM_SHIFT | SDLK_UP): {
-						    scroll_mem -= 0x20;
-						    break;
-					    }
-		case ( KM_SHIFT | SDLK_DOWN): {
-						      scroll_mem += 0x20;
-						      break;
-					      }
-		case ( KM_SHIFT | SDLK_PAGEUP): {
-							scroll_mem -= 0x100;
+					     case ( KM_SHIFT | SDLK_UP): {
+										 scroll_mem -= 0x20;
+										 break;
+									 }
+					     case ( KM_SHIFT | SDLK_DOWN): {
+										   scroll_mem += 0x20;
+										   break;
+									   }
+					     case ( KM_SHIFT | SDLK_PAGEUP): {
+										     scroll_mem -= 0x100;
+										     break;
+									     }
+					     case ( KM_SHIFT | SDLK_PAGEDOWN): {
+										       scroll_mem += 0x100;
+										       break;
+									       }
+
+					     case SDLK_UP: {
+								   int ib = 1;
+								   cursor_cpu = find_lookback(cursor_cpu,&ib);
+								   break;
+							   }
+					     case SDLK_DOWN: {
+								     cursor_cpu += instr_length(read_without_side_effects(cursor_cpu));
+								     break;
+							     }
+					     case SDLK_PAGEUP: {
+								       int ib = 24;
+								       cursor_cpu = find_lookback(cursor_cpu,&ib);
+								       break;
+							       }
+					     case SDLK_PAGEDOWN: {
+									 int ib = 24;
+									 cursor_cpu = find_forward(cursor_cpu,&ib);
+									 break;
+								 }
+					     case SDLK_RETURN: {
+								       if (!sdl_text_prompt("Goto address:",arg,80)) {
+									       break;
+								       }
+								       unsigned addr;
+								       sscanf(arg, "%x", &addr);
+								       if (addr > 0xFFFF)
+									       puts("Address out of range");
+								       else cursor_cpu = addr;
+							       }
+							       break;
+					     case 's':	{
+								debug_mode = NEXT_STEP;
+							}
 							break;
-						}
-		case ( KM_SHIFT | SDLK_PAGEDOWN): {
-							  scroll_mem += 0x100;
-							  break;
-						  }
+					     case (KM_SHIFT | 's'):	{
+										// "step over" by installing a breakpoint on the instruction
+										// next to the one at PC
+										if (debug_mode == SINGLE_STEP) debug_mode = RUN;
+										int f=1;
+										breakpoint_set(find_forward(pc,&f));
+									}
+									break;
+					     case 'b':
+									{
+										if (!sdl_text_prompt("Breakpoint address (add):",arg,80)) {
+											puts("Missing address");
+											break;
+										}
+										unsigned addr;
+										sscanf(arg, "%x", &addr);
+										breakpoint_set(addr);
+										break;
+									}
 
-		case SDLK_UP: {
-				      int ib = 1;
-				      cursor_cpu = find_lookback(cursor_cpu,&ib);
-				      break;
-			      }
-		case SDLK_DOWN: {
-					cursor_cpu += instr_length(read_without_side_effects(cursor_cpu));
-					break;
-				}
-		case SDLK_PAGEUP: {
-					  int ib = 24;
-					  cursor_cpu = find_lookback(cursor_cpu,&ib);
-					  break;
-				  }
-		case SDLK_PAGEDOWN: {
-					    int ib = 24;
-					    cursor_cpu = find_forward(cursor_cpu,&ib);
-					    break;
-				    }
-		case SDLK_RETURN: {
-					  if (!sdl_text_prompt("Goto address:",arg,80)) {
-						  break;
-					  }
-					  unsigned addr;
-					  sscanf(arg, "%x", &addr);
-					  if (addr > 0xFFFF)
-						  puts("Address out of range");
-					  else cursor_cpu = addr;
-				  }
-				  break;
-		case 's':	{
-					debug_mode = NEXT_STEP;
-				}
-				break;
-		case (KM_SHIFT | 's'):	{
-						// "step over" by installing a breakpoint on the instruction
-						// next to the one at PC
-						if (debug_mode == SINGLE_STEP) debug_mode = RUN;
-						int f=1;
-						breakpoint_set(find_forward(pc,&f));
-					}
-					break;
-		case 'b':
-					{
-						if (!sdl_text_prompt("Breakpoint address (add):",arg,80)) {
-							puts("Missing address");
-							break;
-						}
-						unsigned addr;
-						sscanf(arg, "%x", &addr);
-						breakpoint_set(addr);
-						break;
-					}
+									break;
+					     case (KM_SHIFT | 'b'):
+									{
+										if (!sdl_text_prompt("Breakpoint address (delete):",arg,80)) {
+											puts("Missing address");
+											break;
+										}
+										unsigned addr;
+										sscanf(arg, "%x", &addr);
+										breakpoint_remove(addr);
+										break;
+									}
+					     case ' ':
+									{
+										breakpoint_toggle(cursor_cpu);
+									}
+									break;
+					     case (KM_CTRL | 'b'):
+									//delete all breakpoints.
+									for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i) {
+										if (breakpoint_at[i]) {
+											printf("Deleted breakpoint at %04X\n", i);
+											breakpoint_at[i] = false;
+										}
+									}
+									n_breakpoints_set = 0;
+									break;
 
-					break;
-		case (KM_SHIFT | 'b'):
-					{
-						if (!sdl_text_prompt("Breakpoint address (delete):",arg,80)) {
-							puts("Missing address");
-							break;
-						}
-						unsigned addr;
-						sscanf(arg, "%x", &addr);
-						breakpoint_remove(addr);
-						break;
-					}
-		case ' ':
-					{
-						breakpoint_toggle(cursor_cpu);
-					}
-					break;
-		case (KM_CTRL | 'b'):
-					//delete all breakpoints.
-					for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i) {
-						if (breakpoint_at[i]) {
-							printf("Deleted breakpoint at %04X\n", i);
-							breakpoint_at[i] = false;
-						}
-					}
-					n_breakpoints_set = 0;
-					break;
+					     case 'i':
+									for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i)
+										if (breakpoint_at[i])
+											printf("Breakpoint at %04X\n", i);
+									break;
+					     case 'r':
+									if (debug_mode == SINGLE_STEP) debug_mode = RUN;
+									break;
+					     case 'p':		{ //poke
+									if (!sdl_text_prompt("Poke address and value:", arg, 80)) {
+										break;
+									}
+									uint16_t addr;
+									uint8_t val;
+									if (sscanf(arg,"%hx %hhx",&addr,&val) == 2) {
+										write_mem_inst(val,addr);
+									}
+								}
+								break;
+					     case 'l':		{ //load data from file
+									if (!sdl_text_prompt("Filename, start addr, end addr:", arg, 80)) {
+										break;
+									}
+									char filename[64];
+									uint16_t addr_st;
+									uint16_t addr_end;
+									if (sscanf(arg,"%64s %hx %hx",filename,&addr_st,&addr_end) == 3) {
 
-		case 'i':
-					for (unsigned i = 0; i < ARRAY_LEN(breakpoint_at); ++i)
-						if (breakpoint_at[i])
-							printf("Breakpoint at %04X\n", i);
-					break;
-		case 'r':
-					if (debug_mode == SINGLE_STEP) debug_mode = RUN;
-					break;
-		case 'p':		{ //poke
-						if (!sdl_text_prompt("Poke address and value:", arg, 80)) {
-							break;
-						}
-						uint16_t addr;
-						uint8_t val;
-						if (sscanf(arg,"%hx %hhx",&addr,&val) == 2) {
-							write_mem_inst(val,addr);
-						}
-					}
-					break;
-		case 'l':		{ //load data from file
-						if (!sdl_text_prompt("Filename, start addr, end addr:", arg, 80)) {
-							break;
-						}
-						char filename[64];
-						uint16_t addr_st;
-						uint16_t addr_end;
-						if (sscanf(arg,"%64s %hx %hx",filename,&addr_st,&addr_end) == 3) {
+										FILE* loadfile = fopen(filename,"rb");
+										if (!loadfile) break;
 
-							FILE* loadfile = fopen(filename,"rb");
-							if (!loadfile) break;
+										uint16_t l = addr_end - addr_st + 1;
+										uint8_t data[l];
 
-							uint16_t l = addr_end - addr_st + 1;
-							uint8_t data[l];
+										int r = fread(data,l,1,loadfile);
+										if (r!= 1) { printf("Error while loading data.\n"); fclose(loadfile); break; }
 
-							int r = fread(data,l,1,loadfile);
-							if (r!= 1) { printf("Error while loading data.\n"); fclose(loadfile); break; }
+										for (int i=0; i < l; i++)
+											write_mem_inst(data[i],addr_st + i);
 
-							for (int i=0; i < l; i++)
-								write_mem_inst(data[i],addr_st + i);
-						
-						}
-					}
-					break;
-		case 'd':		{ //dump data into file
-						if (!sdl_text_prompt("Filename, start addr, end addr:", arg, 80)) {
-							break;
-						}
-						char filename[64];
-						uint16_t addr_st;
-						uint16_t addr_end;
-						if (sscanf(arg,"%64s %hx %hx",filename,&addr_st,&addr_end) == 3) {
+									}
+								}
+								break;
+					     case 'd':		{ //dump data into file
+									if (!sdl_text_prompt("Filename, start addr, end addr:", arg, 80)) {
+										break;
+									}
+									char filename[64];
+									uint16_t addr_st;
+									uint16_t addr_end;
+									if (sscanf(arg,"%64s %hx %hx",filename,&addr_st,&addr_end) == 3) {
 
-							FILE* dumpfile = fopen(filename,"wb");
-							if (!dumpfile) break;
+										FILE* dumpfile = fopen(filename,"wb");
+										if (!dumpfile) break;
 
-							uint16_t l = addr_end - addr_st + 1;
-							uint8_t data[l];
-							
-							for (int i=0; i < l; i++)
-								data[i] = read_without_side_effects(addr_st + i);
+										uint16_t l = addr_end - addr_st + 1;
+										uint8_t data[l];
 
-							int r = fwrite(data,l,1,dumpfile);
-							if (r!= 1) { printf("Error while saving data.\n"); fclose(dumpfile); break; }
+										for (int i=0; i < l; i++)
+											data[i] = read_without_side_effects(addr_st + i);
 
-						
-						}
-					}
-					break;
-		default:
-					break;
+										int r = fwrite(data,l,1,dumpfile);
+										if (r!= 1) { printf("Error while saving data.\n"); fclose(dumpfile); break; }
+
+
+									}
+								}
+								break;
+					     default:
+								break;
+				     }
+			     }
+			     break;
+		case DV_MEM: {
+			     }
+			     break;
 	}
+
 }
 
 int dbg_log_instruction() {
