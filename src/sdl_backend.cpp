@@ -484,7 +484,7 @@ int sdldbg_puts(const char* s) {
 	return 0;
 }
 
-int mvsdldbg_puts(const char x, const char y,const char* s) {
+int sdldbg_mvputs(const char x, const char y,const char* s) {
 	debug_cur_x = x; debug_cur_y = y;
 	return sdldbg_puts(s);
 }
@@ -528,7 +528,7 @@ int sdldbg_clear(int width, int height) {
 	return 0;
 }
 
-int mvsdldbg_printf(int x, int y, const char* format, ...) {
+int sdldbg_mvprintf(int x, int y, const char* format, ...) {
 
 	va_list ap;
 
@@ -544,7 +544,7 @@ int sdldbg_move(int x, int y) {
 	return 0;
 }
 
-int mvsdldbg_clear(int x, int y, int width, int height) {
+int sdldbg_mvclear(int x, int y, int width, int height) {
 	sdldbg_move(x,y);
 	return sdldbg_clear(width, height);
 }
@@ -567,7 +567,7 @@ int sdldbg_getkey(void) {
 	memcpy(bk_contents, debug_contents + (DBG_COLUMNS * (DBG_ROWS-1)), DBG_COLUMNS);
 	memcpy(bk_colors, debug_colors + (DBG_COLUMNS * (DBG_ROWS-1)), DBG_COLUMNS);
 
-	mvsdldbg_puts(0, (DBG_ROWS-1), " \xF1?\xF0 ");
+	sdldbg_mvputs(0, (DBG_ROWS-1), " \xF1?\xF0 ");
 
 	int keycode = 0;
 
@@ -615,8 +615,8 @@ int sdl_text_prompt(const char* prompt, char* value, size_t value_sz) {
 	memset(debug_contents + (DBG_COLUMNS*(DBG_ROWS-2)), 0, DBG_COLUMNS*2);
 	memset(debug_colors + (DBG_COLUMNS*(DBG_ROWS-2)), 0, DBG_COLUMNS*2);
 
-	mvsdldbg_puts(0, (DBG_ROWS-2), prompt);
-	mvsdldbg_puts(0, (DBG_ROWS-1), " \xF3>\xF0 ");
+	sdldbg_mvputs(0, (DBG_ROWS-2), prompt);
+	sdldbg_mvputs(0, (DBG_ROWS-1), " \xF3>\xF0 ");
 
 	char new_textinput[value_sz];
 	strcpy(new_textinput,value);
@@ -627,7 +627,7 @@ int sdl_text_prompt(const char* prompt, char* value, size_t value_sz) {
 	ignore_events = 1;
 	while (loop) {
 
-		mvsdldbg_printf(3, (DBG_ROWS-1), "%s\x7F ", new_textinput);
+		sdldbg_mvprintf(3, (DBG_ROWS-1), "%s\x7F ", new_textinput);
 		draw_frame();
 
 		SDL_Event event;

@@ -8,16 +8,21 @@
 static enum { RUN, SINGLE_STEP, NEXT_STEP } debug_mode;// = SINGLE_STEP;
 static bool debugger_on = false;
 
-#define DV_CPU 0
-#define DV_MEM 1
-#define DV_COUNT 2
+enum dbgviews {
+	DV_CPU = 0,
+	DV_MEM,
+	DV_COUNT,
+};
 
 static int curview = DV_CPU;
 
 static uint32_t cursor_cpu = 0x8000;
-static uint32_t scroll_mem = 0;
+static uint16_t scroll_cpumem = 0;
 
-static uint32_t cursor_mem = 0;
+static uint16_t scroll_mem = 0;
+static uint16_t cursor_mem = 0;
+static bool mem_insert_mode = false;
+static bool mem_upper_nibble = 0;
 
 int set_debugger_vis(bool vis) {
 	if (vis) {
@@ -449,7 +454,7 @@ needs_first_operand:
 
 		default: goto needs_second_operand;
 	}
-	
+
 	return;
 
 needs_second_operand:
@@ -560,6 +565,8 @@ static void dbg_kbdinput(int keycode) {
 	switch(keycode) {
 		case SDLK_TAB:
 			curview = (curview + 1) % DV_COUNT;
+			sdldbg_move(0,0);
+			sdldbg_clear(DBG_COLUMNS, DBG_ROWS);   
 			return;
 	}
 
@@ -568,19 +575,19 @@ static void dbg_kbdinput(int keycode) {
 				     switch(keycode) {
 
 					     case ( KM_SHIFT | SDLK_UP): {
-										 scroll_mem -= 0x20;
+										 scroll_cpumem -= 0x20;
 										 break;
 									 }
 					     case ( KM_SHIFT | SDLK_DOWN): {
-										   scroll_mem += 0x20;
+										   scroll_cpumem += 0x20;
 										   break;
 									   }
 					     case ( KM_SHIFT | SDLK_PAGEUP): {
-										     scroll_mem -= 0x100;
+										     scroll_cpumem -= 0x100;
 										     break;
 									     }
 					     case ( KM_SHIFT | SDLK_PAGEDOWN): {
-										       scroll_mem += 0x100;
+										       scroll_cpumem += 0x100;
 										       break;
 									       }
 
@@ -735,15 +742,175 @@ static void dbg_kbdinput(int keycode) {
 								}
 								break;
 					     default:
+
 								break;
 				     }
 			     }
 			     break;
 		case DV_MEM: {
+				     switch(keycode) {
+					     case SDLK_UP: {
+								   cursor_mem -= 0x10;
+								   if (cursor_mem < scroll_mem) scroll_mem = (cursor_mem & 0xFFF0);
+								   break;
+							   }
+					     case SDLK_DOWN: {
+								     cursor_mem += 0x10;
+								     if (cursor_mem >= (scroll_mem + 0x100)) scroll_mem = (cursor_mem & 0xFFF0) - 0xF0;
+								     break;
+							     }
+					     case SDLK_LEFT: {
+								     if (!mem_insert_mode) {
+									     cursor_mem -= 1;
+								     } else {
+									     if (mem_upper_nibble) cursor_mem -= 1;
+									     mem_upper_nibble = !mem_upper_nibble;
+								     }
+								     if (cursor_mem < scroll_mem) scroll_mem = (cursor_mem & 0xFFF0);
+								     break;
+							     }
+					     case SDLK_RIGHT: {
+								      if (!mem_insert_mode) {
+									      cursor_mem += 1;
+								      } else {
+									      if (!mem_upper_nibble) cursor_mem += 1;
+									      mem_upper_nibble = !mem_upper_nibble;
+								      }
+								      if (cursor_mem >= (scroll_mem + 0x100)) scroll_mem = (cursor_mem & 0xFFF0) - 0xF0;
+								      break;
+							      }
+					     case SDLK_PAGEUP: {
+								       cursor_mem -= 0x100;
+								       scroll_mem -= 0x100;
+								       break;
+							       }
+					     case SDLK_PAGEDOWN: {
+									 cursor_mem += 0x100;
+									 scroll_mem += 0x100;
+									 break;
+								 }
+					     case 'i':
+								 mem_insert_mode = !mem_insert_mode;
+								 if (mem_insert_mode) mem_upper_nibble = true;
+								 break;
+				     }
+				     if (mem_insert_mode) {
+					     if ( ((keycode >= '0') && (keycode <= '9')) || ((keycode >= 'a') && (keycode <= 'f')) ) {
+
+						     int hexval = (keycode <= '9') ? keycode & 0xF : ((keycode & 0xF) + 0x9);
+						     uint8_t oldval = read_without_side_effects(cursor_mem);
+
+						     if (mem_upper_nibble) {
+							     write_mem_inst ((oldval & 0xF) | (hexval << 4), cursor_mem);
+						     } else {
+							     write_mem_inst ((oldval & 0xF0) | hexval, cursor_mem);
+						     }
+
+						     if (!mem_upper_nibble) cursor_mem += 1;
+						     mem_upper_nibble = !mem_upper_nibble;
+						     if (cursor_mem >= (scroll_mem + 0x100)) scroll_mem = (cursor_mem & 0xFFF0) - 0xF0;
+					     }
+				     }
 			     }
 			     break;
 	}
 
+}
+
+void dbg_redraw_cpu() {
+	sdldbg_mvprintf(86, 0, "\361PC: \360%04X", pc);
+	sdldbg_mvprintf(86, 1, "\361A:  \360%02X", a);
+	sdldbg_mvprintf(86, 2, "\361X:  \360%02X", x);
+	sdldbg_mvprintf(86, 3, "\361Y:  \360%02X", y);
+	sdldbg_mvprintf(86, 4, "\361SP: \360%02X", s);
+
+	sdldbg_mvprintf(86, 5, "\362%c%c%c%c%c%c\360",carry ? 'C' : 'c', !(zn & 0xFF) ? 'Z' : 'z', irq_disable ? 'I' : 'i', decimal ? 'D' : 'd', overflow ? 'V' : 'v', !!(zn & 0x180) ? 'N' : 'n');
+
+	if (pending_nmi && pending_irq)
+		sdldbg_mvputs(86,6," (pending NMI and IRQ)");
+	else if (pending_nmi)
+		sdldbg_mvputs(86,6," (pending NMI)");
+	else if (pending_irq)
+		sdldbg_mvputs(86,6," (pending IRQ)");
+	else
+		sdldbg_mvclear(86,6,24,1);
+
+	sdldbg_move(0,0);
+	sdldbg_clear(64, 50);   
+
+	int instr_f = 24;
+	uint16_t addr_lb = find_lookback(cursor_cpu, &instr_f);
+
+	sdldbg_move(0, 24 - instr_f);
+
+	for (int i =0; i < instr_f + 24; i++) {
+		print_instruction(addr_lb);
+		sdldbg_printf("\n");
+		int il = instr_length(read_without_side_effects(addr_lb));
+
+		if ( (addr_lb < cursor_cpu) && ((addr_lb + il) > cursor_cpu) ) {
+			sdldbg_printf("\361--------\360\n");
+			addr_lb = cursor_cpu;
+		} else addr_lb += il; 
+	}
+
+	//print zeropage
+	for (int iy = 0; iy < 16; iy++) sdldbg_mvprintf(49 - 3, 33 + iy, "\xF1%01Xx", iy);
+	for (int ix = 0; ix < 16; ix++) sdldbg_mvprintf(49 + (3*ix), 33 - 1, "\xF5x%01X", ix );
+	for (int ix = 0; ix < 16; ix++) sdldbg_mvprintf(49 + (3*ix), 33 + 16, "\xF5x%01X", ix );
+	for (int iy = 0; iy < 16; iy++) sdldbg_mvprintf(49 + (16*3), 33 + iy, "\xF1%01Xx", iy);
+
+	for (int iy = 0; iy < 16; iy++)
+		for (int ix = 0; ix < 16; ix++)
+			sdldbg_mvprintf(49 + (3*ix), 33 + iy, "%c%02X", ((ix+iy)%2 ? 0xF3 : 0xF4) , ram[iy * 16 + ix] );
+
+	//print RAM
+
+	for (int iy = 0; iy < 8; iy++) {
+
+		sdldbg_mvprintf(0,51+iy,"\365%04X: \360",scroll_cpumem + 32*iy);
+
+		for (int ix=0; ix<32; ix++) {
+			sdldbg_printf("%c%02X", ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ), read_without_side_effects(scroll_cpumem + (32*iy) + ix) );
+			if ((ix & 15) == 15) sdldbg_puts(" ");
+		}
+
+		sdldbg_puts("\360");
+
+		for (int ix=0; ix<32; ix++) {
+			uint8_t v = read_without_side_effects(scroll_cpumem + (32*iy) + ix);
+			sdldbg_printf("%c", ((v >= 32) && (v < 128)) ? v : '.');
+		}
+	}
+}
+
+void dbg_redraw_mem() {
+	sdldbg_move(16,8);
+	sdldbg_clear(81, 32);   
+
+	for (int iy = 0; iy < 16; iy++) {
+
+		sdldbg_mvprintf(16,8+(2*iy),"\365%04X: \360",scroll_mem + 16*iy);
+
+		for (int ix=0; ix<16; ix++) {
+			sdldbg_printf("%c%02X ", cursor_mem == (scroll_mem + (16*iy) + ix) ? 0371 : ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ), read_without_side_effects(scroll_mem + (16*iy) + ix) );
+		}
+
+		sdldbg_puts("\360");
+
+		for (int ix=0; ix<16; ix++) {
+			uint8_t v = read_without_side_effects(scroll_mem + (16*iy) + ix);
+			sdldbg_printf("%c", ((v >= 32) && (v < 128)) ? v : '.');
+		}
+	}
+
+	if (mem_insert_mode) {
+
+		int ins_x = (cursor_mem - scroll_mem) % 16;
+		int ins_y = (cursor_mem - scroll_mem) / 16;
+
+		sdldbg_mvprintf( 16 + 6 + (3 * ins_x) + (mem_upper_nibble ? 0 : 1), 9 + (2*ins_y), "\360^");
+	}
 }
 
 int dbg_log_instruction() {
@@ -763,68 +930,9 @@ int dbg_log_instruction() {
 	if ( (show_debugger) && ( (debug_mode == SINGLE_STEP) || (frame_offset == 0)) ) {
 		//every frame, output new debugger values
 
-		mvsdldbg_printf(86, 0, "\361PC: \360%04X", pc);
-		mvsdldbg_printf(86, 1, "\361A:  \360%02X", a);
-		mvsdldbg_printf(86, 2, "\361X:  \360%02X", x);
-		mvsdldbg_printf(86, 3, "\361Y:  \360%02X", y);
-		mvsdldbg_printf(86, 4, "\361SP: \360%02X", s);
-
-		mvsdldbg_printf(86, 5, "\362%c%c%c%c%c%c\360",carry ? 'C' : 'c', !(zn & 0xFF) ? 'Z' : 'z', irq_disable ? 'I' : 'i', decimal ? 'D' : 'd', overflow ? 'V' : 'v', !!(zn & 0x180) ? 'N' : 'n');
-
-		if (pending_nmi && pending_irq)
-			mvsdldbg_puts(86,6," (pending NMI and IRQ)");
-		else if (pending_nmi)
-			mvsdldbg_puts(86,6," (pending NMI)");
-		else if (pending_irq)
-			mvsdldbg_puts(86,6," (pending IRQ)");
-		else
-			mvsdldbg_clear(86,6,24,1);
-
-		sdldbg_move(0,0);
-		sdldbg_clear(64, 50);   
-
-		int instr_f = 24;
-		uint16_t addr_lb = find_lookback(cursor_cpu, &instr_f);
-
-		sdldbg_move(0, 24 - instr_f);
-
-		for (int i =0; i < instr_f + 24; i++) {
-			print_instruction(addr_lb);
-			int il = instr_length(read_without_side_effects(addr_lb));
-
-			if ( (addr_lb < cursor_cpu) && ((addr_lb + il) > cursor_cpu) ) {
-				sdldbg_printf("\361--------\360\n");
-				addr_lb = cursor_cpu;
-			} else addr_lb += il; 
-		}
-
-		//print zeropage
-		for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(49 - 3, 33 + iy, "\xF1%01Xx", iy);
-		for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(49 + (3*ix), 33 - 1, "\xF5x%01X", ix );
-		for (int ix = 0; ix < 16; ix++) mvsdldbg_printf(49 + (3*ix), 33 + 16, "\xF5x%01X", ix );
-		for (int iy = 0; iy < 16; iy++) mvsdldbg_printf(49 + (16*3), 33 + iy, "\xF1%01Xx", iy);
-
-		for (int iy = 0; iy < 16; iy++)
-			for (int ix = 0; ix < 16; ix++)
-				mvsdldbg_printf(49 + (3*ix), 33 + iy, "%c%02X", ((ix+iy)%2 ? 0xF3 : 0xF4) , ram[iy * 16 + ix] );
-
-		//print RAM
-
-		for (int iy = 0; iy < 8; iy++) {
-
-			mvsdldbg_printf(0,51+iy,"\365%04X: \360",scroll_mem + 32*iy);
-
-			for (int ix=0; ix<32; ix++) {
-				sdldbg_printf("%c%02X", ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ), read_without_side_effects(scroll_mem + (32*iy) + ix) );
-				if ((ix & 15) == 15) sdldbg_puts(" ");
-			}
-
-			sdldbg_puts("\360");
-
-			for (int ix=0; ix<32; ix++) {
-				uint8_t v = read_without_side_effects(scroll_mem + (32*iy) + ix);
-				sdldbg_printf("%c", ((v >= 32) && (v < 128)) ? v : '.');
-			}
+		switch(curview) {
+			case DV_CPU: dbg_redraw_cpu(); break;
+			case DV_MEM: dbg_redraw_mem(); break;				
 		}
 	}
 
