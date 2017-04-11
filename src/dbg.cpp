@@ -251,7 +251,7 @@ enum addr_types instr_addr_type(int opcode) {
 	}
 }
 
-int instr_length(int opcode) {
+unsigned int instr_length(int opcode) {
 	switch (opcode) {
 		// Implied
 		case BRK: case RTI: case RTS: case PHA: case PHP:
@@ -558,6 +558,8 @@ static int breakpoint_toggle (uint16_t addr) {
 	return breakpoint_at[addr] ? breakpoint_remove(addr) : breakpoint_set(addr);
 }
 
+const char* hextable = "0123456789abcdef";
+
 static void dbg_kbdinput(int keycode) {
 	char arg[80];
 	memset(arg,0,80);
@@ -793,6 +795,26 @@ static void dbg_kbdinput(int keycode) {
 								 mem_insert_mode = !mem_insert_mode;
 								 if (mem_insert_mode) mem_upper_nibble = true;
 								 break;
+					     case (KM_SHIFT |'i'): {
+									if (!sdl_text_prompt("HEX code to insert, non-HEX chars will be skipped.", arg, 80)) {
+										break;
+									}
+
+									unsigned int i=0, r=0;
+									for (i = 0; i < strlen(arg)/2; i++) {
+
+										uint8_t hv = 0;
+									       	const char* upper = strchr(hextable, arg[2*i]);
+									       	const char* lower = strchr(hextable, arg[(2*i)+1]);
+										if ((upper) && (lower))
+										{
+											hv = ((upper - hextable) << 4) + (lower - hextable);
+											write_mem_inst(hv, cursor_mem + i);
+											r++;
+										}
+									}
+									printf("%d bytes written out of %d.\n",r,i);
+								   }
 				     }
 				     if (mem_insert_mode) {
 					     if ( ((keycode >= '0') && (keycode <= '9')) || ((keycode >= 'a') && (keycode <= 'f')) ) {
@@ -846,7 +868,7 @@ void dbg_redraw_cpu() {
 	for (int i =0; i < instr_f + 24; i++) {
 		print_instruction(addr_lb);
 		sdldbg_printf("\n");
-		int il = instr_length(read_without_side_effects(addr_lb));
+		unsigned int il = instr_length(read_without_side_effects(addr_lb));
 
 		if ( (addr_lb < cursor_cpu) && ((addr_lb + il) > cursor_cpu) ) {
 			sdldbg_printf("\361--------\360\n");
