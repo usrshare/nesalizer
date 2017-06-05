@@ -893,7 +893,13 @@ void dbg_redraw_cpu() {
 		sdldbg_mvprintf(0,51+iy,"\365%04X: \360",scroll_cpumem + 32*iy);
 
 		for (int ix=0; ix<32; ix++) {
-			sdldbg_printf("%c%02X", ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ), read_without_side_effects(scroll_cpumem + (32*iy) + ix) );
+			
+			int r = read_without_side_effects(scroll_mem + (16*iy) + ix);
+			if (r == -1) {
+			sdldbg_printf("%c??", ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ));
+			} else {
+			sdldbg_printf("%c%02X", ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ), r);
+			}
 			if ((ix & 15) == 15) sdldbg_puts(" ");
 		}
 
@@ -915,7 +921,13 @@ void dbg_redraw_mem() {
 		sdldbg_mvprintf(16,8+(2*iy),"\365%04X: \360",scroll_mem + 16*iy);
 
 		for (int ix=0; ix<16; ix++) {
-			sdldbg_printf("%c%02X ", cursor_mem == (scroll_mem + (16*iy) + ix) ? 0371 : ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ), read_without_side_effects(scroll_mem + (16*iy) + ix) );
+
+			int r = read_without_side_effects(scroll_mem + (16*iy) + ix);
+			if (r == -1) {
+			sdldbg_printf("%c?? ", cursor_mem == (scroll_mem + (16*iy) + ix) ? 0371 : ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ));
+			} else {
+			sdldbg_printf("%c%02X ", cursor_mem == (scroll_mem + (16*iy) + ix) ? 0371 : ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ), r);
+			}
 		}
 
 		sdldbg_puts("\360");
