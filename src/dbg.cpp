@@ -5,7 +5,7 @@
 #include "mapper.h"
 #include "sdl_backend.h"
 
-static enum { RUN, SINGLE_STEP, NEXT_STEP } debug_mode;// = SINGLE_STEP;
+static enum _debug_mode { RUN, SINGLE_STEP, NEXT_STEP } debug_mode;// = SINGLE_STEP;
 static bool debugger_on = false;
 
 enum dbgviews {
@@ -36,6 +36,14 @@ int set_debugger_vis(bool vis) {
 //
 // Debugging and tracing
 //
+
+static void set_debug_mode ( enum _debug_mode dm ) {
+
+	if ((dm == SINGLE_STEP) && (debug_mode != SINGLE_STEP)) audio_pause(1);
+	if ((dm != SINGLE_STEP) && (debug_mode == SINGLE_STEP)) audio_pause(0);
+
+	debug_mode = dm;
+}
 
 static int read_without_side_effects(uint16_t addr) {
 	switch (addr) {
@@ -624,13 +632,13 @@ static void dbg_kbdinput(int keycode) {
 							       }
 							       break;
 					     case 's':	{
-								debug_mode = NEXT_STEP;
+								set_debug_mode(NEXT_STEP);
 							}
 							break;
 					     case (KM_SHIFT | 's'):	{
 										// "step over" by installing a breakpoint on the instruction
 										// next to the one at PC
-										if (debug_mode == SINGLE_STEP) debug_mode = RUN;
+										if (debug_mode == SINGLE_STEP) set_debug_mode(RUN);
 										int f=1;
 										breakpoint_set(find_forward(pc,&f));
 									}
@@ -681,7 +689,7 @@ static void dbg_kbdinput(int keycode) {
 											printf("Breakpoint at %04X\n", i);
 									break;
 					     case 'r':
-									if (debug_mode == SINGLE_STEP) debug_mode = RUN;
+									if (debug_mode == SINGLE_STEP) set_debug_mode(RUN);
 									break;
 					     case 'p':		{ //poke
 									if (!sdl_text_prompt("Poke address and value:", arg, 80)) {
@@ -949,12 +957,12 @@ void dbg_redraw_mem() {
 
 int dbg_log_instruction() {
 
-	if (debug_mode == NEXT_STEP) { debug_mode = SINGLE_STEP; cursor_cpu = pc; }
+	if (debug_mode == NEXT_STEP) { set_debug_mode(SINGLE_STEP); cursor_cpu = pc; }
 
 	if (debug_mode == RUN) {
 
 		if (n_breakpoints_set > 0 && breakpoint_at[pc]) {
-			debug_mode = SINGLE_STEP;
+			set_debug_mode (SINGLE_STEP);
 			show_debugger = 1;
 			cursor_cpu = pc;
 			printf("forcing cursor\n");
@@ -977,6 +985,6 @@ int dbg_log_instruction() {
 		}
 	}
 
-	if (debug_mode == SINGLE_STEP) audio_pause(1); else audio_pause(0);
+	//if (debug_mode == SINGLE_STEP) audio_pause(1); else audio_pause(0);
 	return (debug_mode != SINGLE_STEP);
 }

@@ -116,6 +116,11 @@ ifneq ($(findstring release,$(CONF)),)
     link_flags    += $(optimizations) -fuse-linker-plugin
 endif
 
+ifeq ($(PROFILE),1)
+    compile_flags += -pg
+    link_flags += -pg
+endif
+
 ifeq ($(BACKTRACE_SUPPORT),1)
     # No -rdynamic support in older Clang versions. This is equivalent.
     link_flags += -Wl,-export-dynamic

@@ -35,9 +35,9 @@ static SDL_Texture  *dbg_font;
 #define DEFAULT_W 640
 #define DEFAULT_H 480
 
-int win_w = DEFAULT_W;
-int win_h = DEFAULT_H;
-SDL_Rect viewport = {.x = 0, .y = 0, .w = DEFAULT_W, .h = DEFAULT_H};
+static int win_w = DEFAULT_W;
+static int win_h = DEFAULT_H;
+static SDL_Rect viewport = {.x = 0, .y = 0, .w = DEFAULT_W, .h = DEFAULT_H};
 
 SDL_Rect boxify() {
 
@@ -253,7 +253,7 @@ static void process_events() {
 	}
 }
 
-const SDL_Rect screentex_valid = {.x = 12, .y = 0, .w = 256, .h = 240};
+static const SDL_Rect screentex_valid = {.x = 12, .y = 0, .w = 256, .h = 240};
 
 static void draw_actual_frame(void) {
 		
