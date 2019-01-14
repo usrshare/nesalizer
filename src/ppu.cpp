@@ -308,7 +308,9 @@ static unsigned get_sprite_pixel(unsigned &spr_pal, bool &spr_behind_bg, bool &s
 // priority. Also handles sprite zero hit detection.
 // Performance hotspot!
 static void do_pixel_output_and_sprite_zero() {
-    unsigned const pixel = dot - 2;
+
+    const int pixel = (dot >= 328) ? dot - 343 : dot - 2;
+
     unsigned pal_index;
 
     if (!rendering_enabled)
@@ -321,10 +323,13 @@ static void do_pixel_output_and_sprite_zero() {
 
         bool           spr_behind_bg, spr_is_s0;
         unsigned       spr_pal;
-        unsigned const spr_pat = get_sprite_pixel(spr_pal, spr_behind_bg, spr_is_s0);
+
+	unsigned const spr_pat = 
+		((pixel >= 0) && (pixel < 256)) ? 
+		get_sprite_pixel(spr_pal, spr_behind_bg, spr_is_s0) : 0;
 
         // Equivalent to 'if (!show_bg || (!show_bg_left_8 && pixel < 8))'
-        if (pixel < bg_clip_comp)
+        if ((pixel < (int)bg_clip_comp) || (pixel >= 256))
             bg_pixel_pat = 0;
         else {
             bg_pixel_pat = (NTH_BIT(bg_shift_h, 15 - fine_x) << 1) |
@@ -637,7 +642,8 @@ static void do_render_line_ops() {
 
 // Called for dots on the visible lines (0-239)
 static void do_visible_line_ops() {
-    if (dot >= 2 && dot <= 257)
+
+    if ( (dot <= 268) || (dot >= 328) )
         do_pixel_output_and_sprite_zero();
 
     if (rendering_enabled) {

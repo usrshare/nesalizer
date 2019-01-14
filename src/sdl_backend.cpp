@@ -63,6 +63,10 @@ SDL_Rect boxify() {
 // TODO: This could probably be optimized to eliminate some copying and format
 // conversions.
 
+#define NES_PPU_W 282 //including the padding
+#define NES_PPU_H 240
+#define NES_PPU_OFFSET 15
+
 static Uint32 *front_buffer;
 static Uint32 *back_buffer;
 
@@ -97,11 +101,13 @@ static const Uint32 dbgpal[16] = {
 	0x000000
 };
 
-void put_pixel(unsigned x, unsigned y, uint32_t color) {
-	assert(x < 256);
-	assert(y < 240);
+void put_pixel(int x, unsigned y, uint32_t color) {
 
-	back_buffer[256*y + x] = color;
+	assert(x >= -NES_PPU_OFFSET );
+	assert(x < (NES_PPU_W - NES_PPU_OFFSET));
+	assert(y < NES_PPU_H);
+
+	back_buffer[NES_PPU_W*y + (x + NES_PPU_OFFSET)] = color;
 }
 
 void draw_frame() {
@@ -253,11 +259,11 @@ static void process_events() {
 	}
 }
 
-static const SDL_Rect screentex_valid = {.x = 12, .y = 0, .w = 256, .h = 240};
+static const SDL_Rect screentex_valid = {.x = 0, .y = 0, .w = NES_PPU_W, .h = NES_PPU_H};
 
 static void draw_actual_frame(void) {
 		
-	fail_if(SDL_UpdateTexture(screen_tex, &screentex_valid, front_buffer, 256*sizeof(Uint32)),
+	fail_if(SDL_UpdateTexture(screen_tex, &screentex_valid, front_buffer, NES_PPU_W*sizeof(Uint32)),
 				"failed to update screen texture: %s", SDL_GetError());
 		fail_if(SDL_RenderCopy(renderer, screen_tex, 0, &viewport),
 				"failed to copy rendered frame to render target: %s", SDL_GetError());
@@ -398,7 +404,7 @@ void init_sdl() {
 					// internally on little-endian systems
 					SDL_PIXELFORMAT_ARGB8888,
 					SDL_TEXTUREACCESS_STREAMING,
-					280, 240)),
+					NES_PPU_W, NES_PPU_H)),
 			"failed to create texture for screen: %s", SDL_GetError());
 
 	SDL_Surface* dbgfontsurf;
@@ -407,7 +413,7 @@ void init_sdl() {
 	dbg_font = SDL_CreateTextureFromSurface(renderer,dbgfontsurf);
 	SDL_FreeSurface(dbgfontsurf);
 
-	static Uint32 render_buffers[2][240*256];
+	static Uint32 render_buffers[2][NES_PPU_H*NES_PPU_W];
 	back_buffer  = render_buffers[0];
 	front_buffer = render_buffers[1];
 

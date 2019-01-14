@@ -13,7 +13,7 @@ void exit_sdl_thread();
 
 // Video
 
-void put_pixel(unsigned x, unsigned y, uint32_t color);
+void put_pixel(int x, unsigned y, uint32_t color);
 void draw_frame();
 
 // Audio
