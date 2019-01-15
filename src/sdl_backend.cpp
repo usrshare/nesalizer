@@ -23,20 +23,29 @@
 // Video
 //
 
-// Each pixel is scaled to scale_factor*scale_factor pixels
-unsigned const scale_factor = 2;
+#define NES_PPU_W 282 //including the padding
+#define NES_PPU_H 240
+#define NES_PPU_OFFSET 15
+
+#define SCREENW 320
+#define SCREENH 240
+
+uint32_t scale_ratio = 2;
 
 static SDL_Window   *screen;
 static SDL_Renderer *renderer;
+
 static SDL_Texture  *screen_tex;
+static SDL_Texture  *screen_tex_scale;
 
 static SDL_Texture  *dbg_font;
 
 #define DEFAULT_W 640
 #define DEFAULT_H 480
 
-static int win_w = DEFAULT_W;
-static int win_h = DEFAULT_H;
+static int win_w = 2 * SCREENW;
+static int win_h = 2 * SCREENH;
+
 static SDL_Rect viewport = {.x = 0, .y = 0, .w = DEFAULT_W, .h = DEFAULT_H};
 
 SDL_Rect boxify() {
@@ -63,9 +72,6 @@ SDL_Rect boxify() {
 // TODO: This could probably be optimized to eliminate some copying and format
 // conversions.
 
-#define NES_PPU_W 282 //including the padding
-#define NES_PPU_H 240
-#define NES_PPU_OFFSET 15
 
 static Uint32 *front_buffer;
 static Uint32 *back_buffer;
@@ -232,6 +238,27 @@ static void process_events_sub(SDL_Event event) {
 			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
 
 				SDL_GetWindowSize(screen,&win_w,&win_h);
+
+				int new_scale = (win_w / SCREENW) < (win_h / SCREENH) ? (win_w / SCREENW) : (win_h / SCREENH);
+				if (new_scale < 1) new_scale = 1;
+
+				if ((unsigned int)new_scale != scale_ratio) {
+
+					scale_ratio = new_scale;
+
+					SDL_DestroyTexture(screen_tex_scale);
+
+					fail_if(!(screen_tex_scale = SDL_CreateTexture(
+					renderer,
+					// SDL takes endianess into account, so this becomes GL_RGBA8
+					// internally on little-endian systems
+					SDL_PIXELFORMAT_ARGB8888,
+					SDL_TEXTUREACCESS_TARGET,
+					scale_ratio * NES_PPU_W, scale_ratio * NES_PPU_H)),
+			"failed to create texture for scaling the screen: %s", SDL_GetError());
+
+				}
+
 				boxify();
 			}
 			break;
@@ -265,7 +292,17 @@ static void draw_actual_frame(void) {
 		
 	fail_if(SDL_UpdateTexture(screen_tex, &screentex_valid, front_buffer, NES_PPU_W*sizeof(Uint32)),
 				"failed to update screen texture: %s", SDL_GetError());
-		fail_if(SDL_RenderCopy(renderer, screen_tex, 0, &viewport),
+	fail_if(SDL_SetRenderTarget(renderer, screen_tex_scale),
+				"failed to set render target: %s", SDL_GetError());
+	fail_if(SDL_RenderCopy(renderer, screen_tex, NULL, NULL),
+				"failed to render pre-scale texture: %s", SDL_GetError());
+	fail_if(SDL_SetRenderTarget(renderer, NULL),
+				"failed to set render target: %s", SDL_GetError());
+
+		fail_if(SDL_RenderClear(renderer),
+				"failed to clear screen: %s", SDL_GetError());
+
+		fail_if(SDL_RenderCopy(renderer, screen_tex_scale, 0, &viewport),
 				"failed to copy rendered frame to render target: %s", SDL_GetError());
 
 		if (show_debugger) {
@@ -307,6 +344,9 @@ static void draw_actual_frame(void) {
 
 		}
 		SDL_RenderPresent(renderer);
+
+	fail_if(SDL_RenderClear(renderer),
+			"failed to clear screen: %s", SDL_GetError());
 }
 
 void sdl_thread() {
@@ -396,7 +436,9 @@ void init_sdl() {
 			printf(" %s", SDL_GetPixelFormatName(renderer_info.texture_formats[i]));
 		putchar('\n');
 	}
-
+	
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"0");
+	
 	fail_if(!(screen_tex =
 				SDL_CreateTexture(
 					renderer,
@@ -406,6 +448,18 @@ void init_sdl() {
 					SDL_TEXTUREACCESS_STREAMING,
 					NES_PPU_W, NES_PPU_H)),
 			"failed to create texture for screen: %s", SDL_GetError());
+
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"2");
+	
+	fail_if(!(screen_tex_scale =
+				SDL_CreateTexture(
+					renderer,
+					// SDL takes endianess into account, so this becomes GL_RGBA8
+					// internally on little-endian systems
+					SDL_PIXELFORMAT_ARGB8888,
+					SDL_TEXTUREACCESS_TARGET,
+					scale_ratio * NES_PPU_W, scale_ratio * NES_PPU_H)),
+			"failed to create texture for scaling the screen: %s", SDL_GetError());
 
 	SDL_Surface* dbgfontsurf;
 	fail_if(!(dbgfontsurf = IMG_ReadXPMFromArray(dbgfont_xpm)),"failed to load debug font: %s", SDL_GetError());
