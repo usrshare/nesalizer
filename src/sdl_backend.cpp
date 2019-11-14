@@ -464,8 +464,15 @@ void init_sdl() {
 	SDL_Surface* dbgfontsurf;
 	fail_if(!(dbgfontsurf = IMG_ReadXPMFromArray(dbgfont_xpm)),"failed to load debug font: %s", SDL_GetError());
 
+	SDL_SetColorKey(dbgfontsurf, SDL_TRUE, 0);
+
 	dbg_font = SDL_CreateTextureFromSurface(renderer,dbgfontsurf);
 	SDL_FreeSurface(dbgfontsurf);
+
+	uint32_t format; int access, w, h;
+	SDL_QueryTexture(dbg_font, &format, &access, &w, &h);
+
+	printf("dbg_font is %u %d %d %d\n",format, access, w, h);
 
 	static Uint32 render_buffers[2][NES_PPU_H*NES_PPU_W];
 	back_buffer  = render_buffers[0];
