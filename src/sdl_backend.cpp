@@ -359,8 +359,8 @@ static void process_events_sub(SDL_Event event) {
 
       for (int c=0; c<4; c++) {
 	for (int b=0; b < I_COUNT; b++) {
-	  int r = parse_inputs(event, controller_binds[c][b], &controller_inputs[c][b]);
-	  if (r) printf(" controller event %d %d: %d\n", c, b, controller_inputs[c][b]);
+	  /*int r = */parse_inputs(event, controller_binds[c][b], &controller_inputs[c][b]);
+	  //if (r) printf(" controller event %d %d: %d\n", c, b, controller_inputs[c][b]);
 	}
       }
 
