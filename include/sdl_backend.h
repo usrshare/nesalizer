@@ -1,3 +1,4 @@
+// vi:sw=2
 // Video, audio, and input backend. Uses SDL2.
 
 #include <SDL.h>
@@ -30,10 +31,52 @@ int audio_pause(bool value);
 
 // Input and events
 
+enum game_inputs {
+  I_A,
+  I_B,
+  I_SELECT,
+  I_START,
+  I_UP,
+  I_DOWN,
+  I_LEFT,
+  I_RIGHT,
+  I_COUNT,
+};
+
+enum global_inputs {
+  IG_RESET,
+  IG_COUNT,
+};
+
+enum debug_inputs {
+  ID_TOGGLE,
+  ID_TOGGLE_NOINPUT,
+  ID_UP,
+  ID_DOWN,
+  ID_LEFT,
+  ID_RIGHT,
+  ID_SHIFT,
+  ID_PAGEUP,
+  ID_PAGEDOWN,
+  ID_ENTER,
+  ID_ESCAPE,
+  ID_STEP,
+  ID_BREAKPOINT,
+  ID_TOGGLEBREAK,
+  ID_POKE,
+  ID_LOAD,
+  ID_DUMP,
+  ID_COUNT,
+};
+
+extern bool controller_inputs[4][I_COUNT];
+extern bool global_inputs[IG_COUNT];
+extern bool debug_inputs[ID_COUNT];
+
 void handle_ui_keys();
 
 extern SDL_mutex *event_lock;
-extern Uint8 const *keys;
+//extern Uint8 const *keys;
 
 extern bool show_debugger;
 

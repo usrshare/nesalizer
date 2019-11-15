@@ -20,7 +20,7 @@ static struct Controller_data {
     bool left_was_pushed, right_was_pushed, up_was_pushed, down_was_pushed;
 
     // Key bindings
-    unsigned key_a, key_b, key_select, key_start, key_up, key_down, key_left, key_right;
+    //unsigned key_a, key_b, key_select, key_start, key_up, key_down, key_left, key_right;
 } controller_data[2];
 
 bool reset_pushed;
@@ -28,23 +28,23 @@ bool reset_pushed;
 void init_input() {
     // Currently hardcoded
 
-    controller_data[0].key_a      = SDL_SCANCODE_L;
-    controller_data[0].key_b      = SDL_SCANCODE_J;
-    controller_data[0].key_select = SDL_SCANCODE_Q;
-    controller_data[0].key_start  = SDL_SCANCODE_E;
-    controller_data[0].key_up     = SDL_SCANCODE_W;
-    controller_data[0].key_down   = SDL_SCANCODE_S;
-    controller_data[0].key_left   = SDL_SCANCODE_A;
-    controller_data[0].key_right  = SDL_SCANCODE_D;
+    //controller_data[0].key_a      = SDL_SCANCODE_L;
+    //controller_data[0].key_b      = SDL_SCANCODE_J;
+    //controller_data[0].key_select = SDL_SCANCODE_Q;
+    //controller_data[0].key_start  = SDL_SCANCODE_E;
+    //controller_data[0].key_up     = SDL_SCANCODE_W;
+    //controller_data[0].key_down   = SDL_SCANCODE_S;
+    //controller_data[0].key_left   = SDL_SCANCODE_A;
+    //controller_data[0].key_right  = SDL_SCANCODE_D;
 
-    controller_data[1].key_a      = SDL_SCANCODE_PERIOD;
-    controller_data[1].key_b      = SDL_SCANCODE_COMMA;
-    controller_data[1].key_select = SDL_SCANCODE_RSHIFT;
-    controller_data[1].key_start  = SDL_SCANCODE_RETURN;
-    controller_data[1].key_up     = SDL_SCANCODE_UP;
-    controller_data[1].key_down   = SDL_SCANCODE_DOWN;
-    controller_data[1].key_left   = SDL_SCANCODE_LEFT;
-    controller_data[1].key_right  = SDL_SCANCODE_RIGHT;
+    //controller_data[1].key_a      = SDL_SCANCODE_PERIOD;
+    //controller_data[1].key_b      = SDL_SCANCODE_COMMA;
+    //controller_data[1].key_select = SDL_SCANCODE_RSHIFT;
+    //controller_data[1].key_start  = SDL_SCANCODE_RETURN;
+    //controller_data[1].key_up     = SDL_SCANCODE_UP;
+    //controller_data[1].key_down   = SDL_SCANCODE_DOWN;
+    //controller_data[1].key_left   = SDL_SCANCODE_LEFT;
+    //controller_data[1].key_right  = SDL_SCANCODE_RIGHT;
 }
 
 void calc_controller_state() {
@@ -55,55 +55,55 @@ void calc_controller_state() {
 
         // Buttons
 
-        c.a_pushed      = keys[c.key_a];
-        c.b_pushed      = keys[c.key_b];
-        c.start_pushed  = keys[c.key_start];
-        c.select_pushed = keys[c.key_select];
+        c.a_pushed      = controller_inputs[i][I_A];
+        c.b_pushed      = controller_inputs[i][I_B];
+        c.start_pushed  = controller_inputs[i][I_START];
+        c.select_pushed = controller_inputs[i][I_SELECT];
 
         // D-Pad (with left+right/up+down elimination if enabled)
 
-        if (!c.left_was_pushed  && keys[c.key_left ])
+        if (!c.left_was_pushed  && controller_inputs[i][I_LEFT] )
             c.left_pushed_most_recently = true;
-        if (!c.right_was_pushed && keys[c.key_right])
+        if (!c.right_was_pushed && controller_inputs[I_RIGHT])
             c.left_pushed_most_recently = false;
-        if (!c.up_was_pushed    && keys[c.key_up   ])
+        if (!c.up_was_pushed    && controller_inputs[I_UP])
             c.up_pushed_most_recently   = true;
-        if (!c.down_was_pushed  && keys[c.key_down ])
+        if (!c.down_was_pushed  && controller_inputs[I_DOWN])
             c.up_pushed_most_recently   = false;
 
         if (prevent_simul_left_right_or_up_down) {
-            if (keys[c.key_left] && keys[c.key_right]) {
+            if (controller_inputs[i][I_LEFT] && controller_inputs[i][I_RIGHT]) {
                 c.left_pushed  =  c.left_pushed_most_recently;
                 c.right_pushed = !c.left_pushed;
             }
             else {
-                c.left_pushed  = keys[c.key_left];
-                c.right_pushed = keys[c.key_right];
+                c.left_pushed  = controller_inputs[i][I_LEFT];
+                c.right_pushed = controller_inputs[i][I_RIGHT];
             }
 
-            if (keys[c.key_up] && keys[c.key_down]) {
+            if (controller_inputs[i][I_UP] && controller_inputs[i][I_DOWN]) {
                 c.up_pushed   =  c.up_pushed_most_recently;
                 c.down_pushed = !c.up_pushed;
             }
             else {
-                c.up_pushed   = keys[c.key_up];
-                c.down_pushed = keys[c.key_down];
+                c.up_pushed   = controller_inputs[i][I_UP];
+                c.down_pushed = controller_inputs[i][I_DOWN];
             }
         }
         else { // !prevent_simul_left_right_or_up_down
-            c.left_pushed  = keys[c.key_left];
-            c.right_pushed = keys[c.key_right];
-            c.up_pushed    = keys[c.key_up];
-            c.down_pushed  = keys[c.key_down];
+            c.left_pushed  = controller_inputs[i][I_LEFT];
+            c.right_pushed = controller_inputs[i][I_RIGHT];
+            c.up_pushed    = controller_inputs[i][I_UP];
+            c.down_pushed  = controller_inputs[i][I_DOWN];
         }
 
-        c.left_was_pushed  = keys[c.key_left];
-        c.right_was_pushed = keys[c.key_right];
-        c.up_was_pushed    = keys[c.key_up];
-        c.down_was_pushed  = keys[c.key_down];
+        c.left_was_pushed  = controller_inputs[i][I_LEFT];
+        c.right_was_pushed = controller_inputs[i][I_RIGHT];
+        c.up_was_pushed    = controller_inputs[i][I_UP];
+        c.down_was_pushed  = controller_inputs[i][I_DOWN];
     }
 
-    reset_pushed = keys[SDL_SCANCODE_F11];
+    reset_pushed = global_inputs[IG_RESET];
 
     SDL_UnlockMutex(event_lock);
 }

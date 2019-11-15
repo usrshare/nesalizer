@@ -1,3 +1,4 @@
+// vi:sw=2
 #include "common.h"
 
 #include "audio.h"
@@ -50,13 +51,13 @@ static SDL_Rect viewport = {.x = 0, .y = 0, .w = DEFAULT_W, .h = DEFAULT_H};
 
 SDL_Rect boxify() {
 
-	double ratio = (win_w * 0.75) / win_h;
+  double ratio = (win_w * 0.75) / win_h;
 
-	int true_w = (ratio >= 1) ? win_h / 0.75 : win_w;
-	int true_h = (ratio >= 1) ? win_h : win_w * 0.75;
+  int true_w = (ratio >= 1) ? win_h / 0.75 : win_w;
+  int true_h = (ratio >= 1) ? win_h : win_w * 0.75;
 
-	viewport = (SDL_Rect){.x = (win_w - true_w) / 2, .y = (win_h - true_h) / 2, .w = true_w, .h = true_h};
-	return viewport;
+  viewport = (SDL_Rect){.x = (win_w - true_w) / 2, .y = (win_h - true_h) / 2, .w = true_w, .h = true_h};
+  return viewport;
 }
 
 // On Unity with the Nouveau driver, displaying the frame sometimes blocks for
@@ -88,53 +89,144 @@ Uint8 debug_colors[DBG_COLUMNS*DBG_ROWS];
 Uint8 debug_cur_color = 0, debug_cur_x=0, debug_cur_y = 0;
 
 static const Uint32 dbgpal[16] = {
-	0xFFFFFF,
-	0xFF8888,
-	0xFFFF88,
-	0x88FF88,
-	0x88FFFF,
-	0x8888FF,
-	0xFF88FF,
-	0x888888,
+  0xFFFFFF,
+  0xFF8888,
+  0xFFFF88,
+  0x88FF88,
+  0x88FFFF,
+  0x8888FF,
+  0xFF88FF,
+  0x888888,
 
-	0xFFFFFF,
-	0xFF0000,
-	0xFFFF00,
-	0x00FF00,
-	0x00FFFF,
-	0x0000FF,
-	0xFF00FF,
-	0x000000
+  0xFFFFFF,
+  0xFF0000,
+  0xFFFF00,
+  0x00FF00,
+  0x00FFFF,
+  0x0000FF,
+  0xFF00FF,
+  0x000000
 };
+
+// -- struct for input handling --
+
+enum input_type {
+  IT_KEYBOARD,
+  IT_CONTROLLERAXIS,
+  IT_CONTROLLERBUTTON,
+  IT_COUNT,
+};
+
+SDL_JoystickID gamepads[4] = {0,0,0,0}; //which gamepad does which player
+
+struct input_bind* controller_binds[4][I_COUNT] = {0,};
+struct input_bind* global_binds[IG_COUNT] = {0,};
+struct input_bind* debug_binds[ID_COUNT] = {0,};
+
+bool controller_inputs[4][I_COUNT] = {false, };
+bool global_inputs[IG_COUNT] = {false, };
+bool debug_inputs[ID_COUNT] = {false, };
+
+struct input_bind {
+  enum input_type type; 
+  union {
+    struct { //keyboard
+      SDL_Scancode k_scancode;
+    };
+    struct { //controller axis
+      Uint8 ca_axis;
+      bool ca_positive; // whether the value is positive or negative
+    };
+    struct { //controller button
+      Uint8 cb_button;
+    };
+  };
+  struct input_bind* next; //this is a linked list
+};
+
+int add_input_bind (struct input_bind** list, struct input_bind value) {
+
+  if (list == NULL) return 1; //can't add to a list that doesn't exist
+
+  struct input_bind* newvalue = (struct input_bind*) malloc(sizeof value);
+  memcpy(newvalue, &value, sizeof value);
+  newvalue->next = NULL;
+
+  if (*list == NULL) { *list = newvalue; return 0; }
+
+  struct input_bind* last = *list;
+  while ( last->next != NULL) last = last->next;
+
+  last->next = newvalue;
+  return 0;
+
+}
+
+void add_default_binds(void) {
+
+  add_input_bind( &controller_binds[0][I_UP],
+      (struct input_bind){.type = IT_KEYBOARD, .k_scancode = SDL_SCANCODE_W, .next = NULL});
+  add_input_bind( &controller_binds[0][I_DOWN],
+      (struct input_bind){.type = IT_KEYBOARD, .k_scancode = SDL_SCANCODE_S, .next = NULL});
+  add_input_bind( &controller_binds[0][I_LEFT],
+      (struct input_bind){.type = IT_KEYBOARD, .k_scancode = SDL_SCANCODE_A, .next = NULL});
+  add_input_bind( &controller_binds[0][I_RIGHT],
+      (struct input_bind){.type = IT_KEYBOARD, .k_scancode = SDL_SCANCODE_D, .next = NULL});
+  add_input_bind( &controller_binds[0][I_SELECT],
+      (struct input_bind){.type = IT_KEYBOARD, .k_scancode = SDL_SCANCODE_Q, .next = NULL});
+  add_input_bind( &controller_binds[0][I_START],
+      (struct input_bind){.type = IT_KEYBOARD, .k_scancode = SDL_SCANCODE_E, .next = NULL});
+  add_input_bind( &controller_binds[0][I_B],
+      (struct input_bind){.type = IT_KEYBOARD, .k_scancode = SDL_SCANCODE_J, .next = NULL});
+  add_input_bind( &controller_binds[0][I_A],
+      (struct input_bind){.type = IT_KEYBOARD, .k_scancode = SDL_SCANCODE_L, .next = NULL});
+  
+  add_input_bind( &global_binds[IG_RESET],
+      (struct input_bind){.type = IT_KEYBOARD, .k_scancode = SDL_SCANCODE_F11, .next = NULL});
+
+}
+
+
+
+
+
+
+
+
+
+
+// ---------------
+
+
 
 void put_pixel(int x, unsigned y, uint32_t color) {
 
-	assert(x >= -NES_PPU_OFFSET );
-	assert(x < (NES_PPU_W - NES_PPU_OFFSET));
-	assert(y < NES_PPU_H);
+  assert(x >= -NES_PPU_OFFSET );
+  assert(x < (NES_PPU_W - NES_PPU_OFFSET));
+  assert(y < NES_PPU_H);
 
-	back_buffer[NES_PPU_W*y + (x + NES_PPU_OFFSET)] = color;
+  back_buffer[NES_PPU_W*y + (x + NES_PPU_OFFSET)] = color;
 }
 
 void draw_frame() {
 #ifdef RECORD_MOVIE
-	add_movie_video_frame(back_buffer);
+  add_movie_video_frame(back_buffer);
 #endif
 
-	// Signal to the SDL thread that the frame has ended
+  // Signal to the SDL thread that the frame has ended
 
-	SDL_LockMutex(frame_lock);
-	// Drop the new frame if the old one is still being rendered. This also
-	// means that we drop event processing for one frame, but it's probably not
-	// a huge deal.
-	if (ready_to_draw_new_frame) {
-		frame_available = true;
-		swap(back_buffer, front_buffer);
-		SDL_CondSignal(frame_available_cond);
-	} else {
-		printf("dropping frame\n");
-	}
-	SDL_UnlockMutex(frame_lock);
+  SDL_LockMutex(frame_lock);
+  // Drop the new frame if the old one is still being rendered. This also
+  // means that we drop event processing for one frame, but it's probably not
+  // a huge deal.
+  if (ready_to_draw_new_frame) {
+    frame_available = true;
+    swap(back_buffer, front_buffer);
+    SDL_CondSignal(frame_available_cond);
+  } else {
+    printf("dropping frame\n");
+  }
+  SDL_UnlockMutex(frame_lock);
 }
 
 //
@@ -145,9 +237,9 @@ Uint16 const sdl_audio_buffer_size = 2048;
 static SDL_AudioDeviceID audio_device_id;
 
 static void audio_callback(void*, Uint8 *stream, int len) {
-	assert(len >= 0);
+  assert(len >= 0);
 
-	read_samples((int16_t*)stream, len/sizeof(int16_t));
+  read_samples((int16_t*)stream, len/sizeof(int16_t));
 }
 
 void lock_audio() { SDL_LockAudioDevice(audio_device_id); }
@@ -156,231 +248,290 @@ void unlock_audio() { SDL_UnlockAudioDevice(audio_device_id); }
 bool audio_pb = 1;
 int audio_pause(bool value) {
 
-	if (value == audio_pb) return value;
-	int oldpb = audio_pb;
-	SDL_PauseAudioDevice(audio_device_id, value);
-	audio_pb = value;
-	return oldpb; }
+  if (value == audio_pb) return value;
+  int oldpb = audio_pb;
+  SDL_PauseAudioDevice(audio_device_id, value);
+  audio_pb = value;
+  return oldpb; }
 
-//
-// Input
-//
+  //
+  // Input
+  //
 
-Uint8 const *keys;
+  Uint8 const *keys;
 
-Uint8 *keys_lf = NULL;
-int keys_size = 0;
+  Uint8 *keys_lf = NULL;
+  int keys_size = 0;
 
-int lastdbgkey = 0;
+  int lastdbgkey = 0;
 
 #define KEY_PRESSED(i) ( (keys[i]) & (!keys_lf[i]) )
 #define KEY_RELEASED(i) ( (!keys[i]) & (keys_lf[i]) )
 
-//
-// SDL thread and events
-//
+  //
+  // SDL thread and events
+  //
 
-bool cc_held = 0;
+  bool cc_held = 0;
 
-SDL_mutex   *event_lock;
+  SDL_mutex   *event_lock;
 
-// Runs from emulation thread
-void handle_ui_keys() {
-	SDL_LockMutex(event_lock);
+  // Runs from emulation thread
+  void handle_ui_keys() {
+    SDL_LockMutex(event_lock);
 
-	if (keys[SDL_SCANCODE_ESCAPE]) 
-		exit(0);
+    if (keys[SDL_SCANCODE_ESCAPE]) 
+      exit(0);
 #ifdef ENABLE_CORRUPTION
-	if (KEY_PRESSED(SDL_SCANCODE_F3)) {
-		corrupt_chance += 0x1000; printf("New corrupt chance is %u\n", corrupt_chance); }
+    if (KEY_PRESSED(SDL_SCANCODE_F3)) {
+      corrupt_chance += 0x1000; printf("New corrupt chance is %u\n", corrupt_chance); }
 
-	if (KEY_PRESSED(SDL_SCANCODE_F4)) {
-		corrupt_chance -= 0x1000; printf("New corrupt chance is %u\n", corrupt_chance); }
+    if (KEY_PRESSED(SDL_SCANCODE_F4)) {
+      corrupt_chance -= 0x1000; printf("New corrupt chance is %u\n", corrupt_chance); }
 #endif
 
-	if (keys[SDL_SCANCODE_LALT] && (KEY_PRESSED(SDL_SCANCODE_D))) {
-		show_debugger = !show_debugger;
-		set_debugger_vis(show_debugger);
-	}
+    if (keys[SDL_SCANCODE_LALT] && (KEY_PRESSED(SDL_SCANCODE_D))) {
+      show_debugger = !show_debugger;
+      set_debugger_vis(show_debugger);
+    }
 
-	if (keys[SDL_SCANCODE_F5])
-		save_state();
-	else if (keys[SDL_SCANCODE_F8])
-		load_state();
+    if (keys[SDL_SCANCODE_F5])
+      save_state();
+    else if (keys[SDL_SCANCODE_F8])
+      load_state();
 #ifdef INCLUDE_REWIND
-	handle_rewind(keys[SDL_SCANCODE_BACKSPACE]);
+    handle_rewind(keys[SDL_SCANCODE_BACKSPACE]);
 #endif
-	if (reset_pushed)
-		soft_reset();
+    if (reset_pushed)
+      soft_reset();
 
-	SDL_UnlockMutex(event_lock);
-	if (keys_size) memcpy(keys_lf, keys, keys_size * sizeof(Uint8));
-}
+    SDL_UnlockMutex(event_lock);
+    if (keys_size) memcpy(keys_lf, keys, keys_size * sizeof(Uint8));
+  }
 
 static bool pending_sdl_thread_exit;
 
+static bool parse_inputs(SDL_Event event, struct input_bind* bind, bool* input) {
+
+  if (!bind) return false;
+
+  for (;bind != NULL; bind = bind->next) {
+
+    switch(bind->type) {
+      case IT_KEYBOARD:
+	if ((event.type != SDL_KEYDOWN) && (event.type != SDL_KEYUP)) continue;
+	if (bind->k_scancode != event.key.keysym.scancode) continue;
+	*input = (event.key.state == SDL_PRESSED);
+	return true;
+	break;
+      case IT_CONTROLLERAXIS:
+	if (event.type != SDL_CONTROLLERAXISMOTION) continue;
+	if (bind->ca_axis != event.caxis.axis) continue;
+
+	if ((bind->ca_positive) && (event.caxis.value < 0)) continue;
+	if ((!bind->ca_positive) && (event.caxis.value > 0)) continue;
+
+	*input = (abs(event.caxis.value) >= 1); //maybe replace with deadzone value;
+	return true;
+	break;
+      case IT_CONTROLLERBUTTON:
+	if ((event.type != SDL_CONTROLLERBUTTONDOWN) && (event.type != SDL_CONTROLLERBUTTONUP)) continue;
+	if (bind->cb_button != event.cbutton.button) continue;
+	*input = (event.cbutton.state == SDL_PRESSED);
+	return true;
+	break;
+    }
+
+  }
+  return false;
+}
+
 static void process_events_sub(SDL_Event event) {
 
-	switch(event.type) {
-		case SDL_KEYDOWN:
-			if (show_debugger) {
-				int keycode = event.key.keysym.sym;
-				int mods = SDL_GetModState();
-				if ((mods & KMOD_SHIFT)) keycode |= KM_SHIFT;
-				if ((mods & KMOD_CTRL)) keycode |= KM_CTRL;
-				if ((mods & KMOD_ALT)) keycode |= KM_ALT;
-			
-				lastdbgkey = keycode;	
-			}
-			break;
-		case SDL_WINDOWEVENT:
+  switch(event.type) {
 
-			if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+    case SDL_KEYDOWN:
+    case SDL_KEYUP:
+    case SDL_CONTROLLERAXISMOTION:
+    case SDL_CONTROLLERBUTTONDOWN:
+    case SDL_CONTROLLERBUTTONUP:
 
-				SDL_GetWindowSize(screen,&win_w,&win_h);
 
-				int new_scale = (win_w / SCREENW) < (win_h / SCREENH) ? (win_w / SCREENW) : (win_h / SCREENH);
-				if (new_scale < 1) new_scale = 1;
-
-				if ((unsigned int)new_scale != scale_ratio) {
-
-					scale_ratio = new_scale;
-
-					SDL_DestroyTexture(screen_tex_scale);
-
-					fail_if(!(screen_tex_scale = SDL_CreateTexture(
-					renderer,
-					// SDL takes endianess into account, so this becomes GL_RGBA8
-					// internally on little-endian systems
-					SDL_PIXELFORMAT_ARGB8888,
-					SDL_TEXTUREACCESS_TARGET,
-					scale_ratio * NES_PPU_W, scale_ratio * NES_PPU_H)),
-			"failed to create texture for scaling the screen: %s", SDL_GetError());
-
-				}
-
-				boxify();
-			}
-			break;
-		case SDL_QUIT:
-			end_emulation();
-			pending_sdl_thread_exit = true;
-#ifdef RUN_TESTS
-			end_testing = true;
-#endif
-			break;
+      for (int c=0; c<4; c++) {
+	for (int b=0; b < I_COUNT; b++) {
+	  int r = parse_inputs(event, controller_binds[c][b], &controller_inputs[c][b]);
+	  if (r) printf(" controller event %d %d: %d\n", c, b, controller_inputs[c][b]);
 	}
+      }
+
+      for (int b=0; b < IG_COUNT; b++) {
+	parse_inputs(event, global_binds[b], &global_inputs[b]);
+      }
+
+      if (show_debugger) {
+	for (int b=0; b < ID_COUNT; b++) {
+	  parse_inputs(event, debug_binds[b], &debug_inputs[b]);
+	}
+      }
+
+      if ((event.type == SDL_KEYDOWN) && (show_debugger)) {
+	int keycode = event.key.keysym.sym;
+	int mods = SDL_GetModState();
+	if ((mods & KMOD_SHIFT)) keycode |= KM_SHIFT;
+	if ((mods & KMOD_CTRL)) keycode |= KM_CTRL;
+	if ((mods & KMOD_ALT)) keycode |= KM_ALT;
+
+	lastdbgkey = keycode;	
+      }
+      break;
+    case SDL_WINDOWEVENT:
+
+      if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+
+	SDL_GetWindowSize(screen,&win_w,&win_h);
+
+	int new_scale = (win_w / SCREENW) < (win_h / SCREENH) ? (win_w / SCREENW) : (win_h / SCREENH);
+	if (new_scale < 1) new_scale = 1;
+
+	if ((unsigned int)new_scale != scale_ratio) {
+
+	  scale_ratio = new_scale;
+
+	  SDL_DestroyTexture(screen_tex_scale);
+
+	  fail_if(!(screen_tex_scale = SDL_CreateTexture(
+		  renderer,
+		  // SDL takes endianess into account, so this becomes GL_RGBA8
+		  // internally on little-endian systems
+		  SDL_PIXELFORMAT_ARGB8888,
+		  SDL_TEXTUREACCESS_TARGET,
+		  scale_ratio * NES_PPU_W, scale_ratio * NES_PPU_H)),
+	      "failed to create texture for scaling the screen: %s", SDL_GetError());
+
+	}
+
+	boxify();
+      }
+      break;
+    case SDL_QUIT:
+      end_emulation();
+      pending_sdl_thread_exit = true;
+#ifdef RUN_TESTS
+      end_testing = true;
+#endif
+      break;
+  }
 
 }
 
 int ignore_events = 0;
 static void process_events() {
-	SDL_Event event;
-	if (!ignore_events) {
-	SDL_LockMutex(event_lock);
-	while (SDL_PollEvent(&event)) {
-		process_events_sub(event);
+  SDL_Event event;
+  if (!ignore_events) {
+    SDL_LockMutex(event_lock);
+    while (SDL_PollEvent(&event)) {
+      process_events_sub(event);
 
-	}
-	SDL_UnlockMutex(event_lock);
-	}
+    }
+    SDL_UnlockMutex(event_lock);
+  }
 }
 
 static const SDL_Rect screentex_valid = {.x = 0, .y = 0, .w = NES_PPU_W, .h = NES_PPU_H};
 
 static void draw_actual_frame(void) {
-		
-	fail_if(SDL_UpdateTexture(screen_tex, &screentex_valid, front_buffer, NES_PPU_W*sizeof(Uint32)),
-				"failed to update screen texture: %s", SDL_GetError());
-	fail_if(SDL_SetRenderTarget(renderer, screen_tex_scale),
-				"failed to set render target: %s", SDL_GetError());
-	fail_if(SDL_RenderCopy(renderer, screen_tex, NULL, NULL),
-				"failed to render pre-scale texture: %s", SDL_GetError());
-	fail_if(SDL_SetRenderTarget(renderer, NULL),
-				"failed to set render target: %s", SDL_GetError());
 
-		fail_if(SDL_RenderClear(renderer),
-				"failed to clear screen: %s", SDL_GetError());
+  fail_if(SDL_UpdateTexture(screen_tex, &screentex_valid, front_buffer, NES_PPU_W*sizeof(Uint32)),
+      "failed to update screen texture: %s", SDL_GetError());
+  fail_if(SDL_SetRenderTarget(renderer, screen_tex_scale),
+      "failed to set render target: %s", SDL_GetError());
+  fail_if(SDL_RenderCopy(renderer, screen_tex, NULL, NULL),
+      "failed to render pre-scale texture: %s", SDL_GetError());
+  fail_if(SDL_SetRenderTarget(renderer, NULL),
+      "failed to set render target: %s", SDL_GetError());
 
-		fail_if(SDL_RenderCopy(renderer, screen_tex_scale, 0, &viewport),
-				"failed to copy rendered frame to render target: %s", SDL_GetError());
+  fail_if(SDL_RenderClear(renderer),
+      "failed to clear screen: %s", SDL_GetError());
 
-		if (show_debugger) {
-			SDL_Rect dstrect;
-			dstrect.w = DBG_SCRWIDTH; dstrect.h = DBG_SCRHEIGHT;
-			dstrect.x = win_w/2 - DBG_SCRWIDTH/2; dstrect.y = win_h/2 - DBG_SCRHEIGHT/2;
+  fail_if(SDL_RenderCopy(renderer, screen_tex_scale, 0, &viewport),
+      "failed to copy rendered frame to render target: %s", SDL_GetError());
 
-			SDL_SetRenderDrawColor(renderer,0,0,0,128);
-			SDL_SetRenderDrawBlendMode(renderer,SDL_BLENDMODE_BLEND);
-			SDL_RenderFillRect(renderer, &dstrect);
+  if (show_debugger) {
+    SDL_Rect dstrect;
+    dstrect.w = DBG_SCRWIDTH; dstrect.h = DBG_SCRHEIGHT;
+    dstrect.x = win_w/2 - DBG_SCRWIDTH/2; dstrect.y = win_h/2 - DBG_SCRHEIGHT/2;
 
-			SDL_Rect charrect; charrect.w = DBG_CHARWIDTH; charrect.h = DBG_CHARHEIGHT;
-			SDL_Rect dbgrect; dbgrect.w = DBG_CHARWIDTH; dbgrect.h = DBG_CHARHEIGHT;
+    SDL_SetRenderDrawColor(renderer,0,0,0,128);
+    SDL_SetRenderDrawBlendMode(renderer,SDL_BLENDMODE_BLEND);
+    SDL_RenderFillRect(renderer, &dstrect);
 
-			int lastcolor = -1;
+    SDL_Rect charrect; charrect.w = DBG_CHARWIDTH; charrect.h = DBG_CHARHEIGHT;
+    SDL_Rect dbgrect; dbgrect.w = DBG_CHARWIDTH; dbgrect.h = DBG_CHARHEIGHT;
 
-			for (int iy=0; iy < DBG_ROWS; iy++) {
-				dbgrect.y = dstrect.y + (iy*DBG_CHARHEIGHT);
-				for (int ix=0; ix < DBG_COLUMNS; ix++) {
-					dbgrect.x = dstrect.x + (ix*DBG_CHARWIDTH);
-					Uint8 dbgcont = debug_contents[iy*DBG_COLUMNS+ix];
-					if (dbgcont == 0) dbgcont = 32;
-					if (dbgcont >= 32) {
-						charrect.x = ((debug_contents[iy*DBG_COLUMNS+ix] - 32) % 16) * DBG_CHARWIDTH;
-						charrect.y = ((debug_contents[iy*DBG_COLUMNS+ix] - 32) / 16) * DBG_CHARHEIGHT;
-						if (debug_colors[iy*DBG_COLUMNS+ix] != lastcolor) {
+    int lastcolor = -1;
 
-							int curcol = debug_colors[iy*DBG_COLUMNS+ix];
+    for (int iy=0; iy < DBG_ROWS; iy++) {
+      dbgrect.y = dstrect.y + (iy*DBG_CHARHEIGHT);
+      for (int ix=0; ix < DBG_COLUMNS; ix++) {
+	dbgrect.x = dstrect.x + (ix*DBG_CHARWIDTH);
+	Uint8 dbgcont = debug_contents[iy*DBG_COLUMNS+ix];
+	if (dbgcont == 0) dbgcont = 32;
+	if (dbgcont >= 32) {
+	  charrect.x = ((debug_contents[iy*DBG_COLUMNS+ix] - 32) % 16) * DBG_CHARWIDTH;
+	  charrect.y = ((debug_contents[iy*DBG_COLUMNS+ix] - 32) / 16) * DBG_CHARHEIGHT;
+	  if (debug_colors[iy*DBG_COLUMNS+ix] != lastcolor) {
 
-							SDL_SetTextureColorMod(dbg_font, dbgpal[curcol] >> 16, (dbgpal[curcol] >> 8) & 0xFF, dbgpal[curcol] & 0xFF);
-							lastcolor = curcol;
-						}
+	    int curcol = debug_colors[iy*DBG_COLUMNS+ix];
 
-						fail_if(SDL_RenderCopy(renderer,dbg_font,&charrect,&dbgrect), "failed to draw debug character: %s",SDL_GetError());
-					}
-				}
-			}
+	    SDL_SetTextureColorMod(dbg_font, dbgpal[curcol] >> 16, (dbgpal[curcol] >> 8) & 0xFF, dbgpal[curcol] & 0xFF);
+	    lastcolor = curcol;
+	  }
+
+	  fail_if(SDL_RenderCopy(renderer,dbg_font,&charrect,&dbgrect), "failed to draw debug character: %s",SDL_GetError());
+	}
+      }
+    }
 
 
-		}
-		SDL_RenderPresent(renderer);
+  }
+  SDL_RenderPresent(renderer);
 
-	fail_if(SDL_RenderClear(renderer),
-			"failed to clear screen: %s", SDL_GetError());
+  fail_if(SDL_RenderClear(renderer),
+      "failed to clear screen: %s", SDL_GetError());
 }
 
 void sdl_thread() {
-	for (;;) {
+  for (;;) {
 
-		// Wait for the emulation thread to signal that a frame has completed
+    // Wait for the emulation thread to signal that a frame has completed
 
-		SDL_LockMutex(frame_lock);
-		ready_to_draw_new_frame = true;
-		while (!frame_available && !pending_sdl_thread_exit)
-			SDL_CondWait(frame_available_cond, frame_lock);
-		if (pending_sdl_thread_exit) {
-			SDL_UnlockMutex(frame_lock);
-			return;
-		}
-		frame_available = ready_to_draw_new_frame = false;
-		SDL_UnlockMutex(frame_lock);
+    SDL_LockMutex(frame_lock);
+    ready_to_draw_new_frame = true;
+    while (!frame_available && !pending_sdl_thread_exit)
+      SDL_CondWait(frame_available_cond, frame_lock);
+    if (pending_sdl_thread_exit) {
+      SDL_UnlockMutex(frame_lock);
+      return;
+    }
+    frame_available = ready_to_draw_new_frame = false;
+    SDL_UnlockMutex(frame_lock);
 
-		// Process events and calculate controller input state (which might
-		// need left+right/up+down elimination)
+    // Process events and calculate controller input state (which might
+    // need left+right/up+down elimination)
 
-		process_events();
+    process_events();
 
-		// Draw the new frame
+    // Draw the new frame
 
-		draw_actual_frame();
-	}
+    draw_actual_frame();
+  }
 }
 
 void exit_sdl_thread() {
-	SDL_LockMutex(frame_lock);
-	pending_sdl_thread_exit = true;
-	SDL_CondSignal(frame_available_cond);
-	SDL_UnlockMutex(frame_lock);
+  SDL_LockMutex(frame_lock);
+  pending_sdl_thread_exit = true;
+  SDL_CondSignal(frame_available_cond);
+  SDL_UnlockMutex(frame_lock);
 }
 
 //
@@ -388,372 +539,373 @@ void exit_sdl_thread() {
 //
 
 void init_sdl() {
-	SDL_version sdl_compiled_version, sdl_linked_version;
-	SDL_VERSION(&sdl_compiled_version);
-	SDL_GetVersion(&sdl_linked_version);
-	printf("Using SDL backend. Compiled against SDL %d.%d.%d, linked to SDL %d.%d.%d.\n",
-			sdl_compiled_version.major, sdl_compiled_version.minor, sdl_compiled_version.patch,
-			sdl_linked_version.major, sdl_linked_version.minor, sdl_linked_version.patch);
+  SDL_version sdl_compiled_version, sdl_linked_version;
+  SDL_VERSION(&sdl_compiled_version);
+  SDL_GetVersion(&sdl_linked_version);
+  printf("Using SDL backend. Compiled against SDL %d.%d.%d, linked to SDL %d.%d.%d.\n",
+      sdl_compiled_version.major, sdl_compiled_version.minor, sdl_compiled_version.patch,
+      sdl_linked_version.major, sdl_linked_version.minor, sdl_linked_version.patch);
 
-	// SDL and video
+  // SDL and video
 
-	// Make this configurable later
-	SDL_DisableScreenSaver();
+  // Make this configurable later
+  SDL_DisableScreenSaver();
 
-	fail_if(SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO) != 0,
-			"failed to initialize SDL: %s", SDL_GetError());
+  fail_if(SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO) != 0,
+      "failed to initialize SDL: %s", SDL_GetError());
 
-	fail_if(!(screen =
-				SDL_CreateWindow(
-					"Nesalizer",
-					SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-					DEFAULT_W, DEFAULT_H,
-					SDL_WINDOW_RESIZABLE)),
-			"failed to create window: %s", SDL_GetError());
+  fail_if(!(screen =
+	SDL_CreateWindow(
+	  "Nesalizer",
+	  SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+	  DEFAULT_W, DEFAULT_H,
+	  SDL_WINDOW_RESIZABLE)),
+      "failed to create window: %s", SDL_GetError());
 
-	fail_if(!(renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE)),
-			"failed to create rendering context: %s", SDL_GetError());
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+  fail_if(!(renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE)),
+      "failed to create rendering context: %s", SDL_GetError());
+  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
 
-	// Display some information about the renderer
-	SDL_RendererInfo renderer_info;
-	if (SDL_GetRendererInfo(renderer, &renderer_info))
-		puts("Failed to get renderer information from SDL");
-	else {
-		if (renderer_info.name)
-			printf("renderer: uses renderer \"%s\"\n", renderer_info.name);
-		if (renderer_info.flags & SDL_RENDERER_SOFTWARE)
-			puts("renderer: uses software rendering");
-		if (renderer_info.flags & SDL_RENDERER_ACCELERATED)
-			puts("renderer: uses hardware-accelerated rendering");
-		if (renderer_info.flags & SDL_RENDERER_PRESENTVSYNC)
-			puts("renderer: uses vsync");
-		if (renderer_info.flags & SDL_RENDERER_TARGETTEXTURE)
-			puts("renderer: supports rendering to texture");
-		printf("renderer: available texture formats:");
-		unsigned const n_texture_formats = min(16u, (unsigned)renderer_info.num_texture_formats);
-		for (unsigned i = 0; i < n_texture_formats; ++i)
-			printf(" %s", SDL_GetPixelFormatName(renderer_info.texture_formats[i]));
-		putchar('\n');
-	}
-	
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"0");
-	
-	fail_if(!(screen_tex =
-				SDL_CreateTexture(
-					renderer,
-					// SDL takes endianess into account, so this becomes GL_RGBA8
-					// internally on little-endian systems
-					SDL_PIXELFORMAT_ARGB8888,
-					SDL_TEXTUREACCESS_STREAMING,
-					NES_PPU_W, NES_PPU_H)),
-			"failed to create texture for screen: %s", SDL_GetError());
+  // Display some information about the renderer
+  SDL_RendererInfo renderer_info;
+  if (SDL_GetRendererInfo(renderer, &renderer_info))
+    puts("Failed to get renderer information from SDL");
+  else {
+    if (renderer_info.name)
+      printf("renderer: uses renderer \"%s\"\n", renderer_info.name);
+    if (renderer_info.flags & SDL_RENDERER_SOFTWARE)
+      puts("renderer: uses software rendering");
+    if (renderer_info.flags & SDL_RENDERER_ACCELERATED)
+      puts("renderer: uses hardware-accelerated rendering");
+    if (renderer_info.flags & SDL_RENDERER_PRESENTVSYNC)
+      puts("renderer: uses vsync");
+    if (renderer_info.flags & SDL_RENDERER_TARGETTEXTURE)
+      puts("renderer: supports rendering to texture");
+    printf("renderer: available texture formats:");
+    unsigned const n_texture_formats = min(16u, (unsigned)renderer_info.num_texture_formats);
+    for (unsigned i = 0; i < n_texture_formats; ++i)
+      printf(" %s", SDL_GetPixelFormatName(renderer_info.texture_formats[i]));
+    putchar('\n');
+  }
 
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"2");
-	
-	fail_if(!(screen_tex_scale =
-				SDL_CreateTexture(
-					renderer,
-					// SDL takes endianess into account, so this becomes GL_RGBA8
-					// internally on little-endian systems
-					SDL_PIXELFORMAT_ARGB8888,
-					SDL_TEXTUREACCESS_TARGET,
-					scale_ratio * NES_PPU_W, scale_ratio * NES_PPU_H)),
-			"failed to create texture for scaling the screen: %s", SDL_GetError());
+  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"0");
 
-	SDL_Surface* dbgfontsurf;
-	fail_if(!(dbgfontsurf = IMG_ReadXPMFromArray(dbgfont_xpm)),"failed to load debug font: %s", SDL_GetError());
+  fail_if(!(screen_tex =
+	SDL_CreateTexture(
+	  renderer,
+	  // SDL takes endianess into account, so this becomes GL_RGBA8
+	  // internally on little-endian systems
+	  SDL_PIXELFORMAT_ARGB8888,
+	  SDL_TEXTUREACCESS_STREAMING,
+	  NES_PPU_W, NES_PPU_H)),
+      "failed to create texture for screen: %s", SDL_GetError());
 
-	SDL_SetColorKey(dbgfontsurf, SDL_TRUE, 0);
+  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"2");
 
-	dbg_font = SDL_CreateTextureFromSurface(renderer,dbgfontsurf);
-	SDL_FreeSurface(dbgfontsurf);
+  fail_if(!(screen_tex_scale =
+	SDL_CreateTexture(
+	  renderer,
+	  // SDL takes endianess into account, so this becomes GL_RGBA8
+	  // internally on little-endian systems
+	  SDL_PIXELFORMAT_ARGB8888,
+	  SDL_TEXTUREACCESS_TARGET,
+	  scale_ratio * NES_PPU_W, scale_ratio * NES_PPU_H)),
+      "failed to create texture for scaling the screen: %s", SDL_GetError());
 
-	uint32_t format; int access, w, h;
-	SDL_QueryTexture(dbg_font, &format, &access, &w, &h);
+  SDL_Surface* dbgfontsurf;
+  fail_if(!(dbgfontsurf = IMG_ReadXPMFromArray(dbgfont_xpm)),"failed to load debug font: %s", SDL_GetError());
 
-	printf("dbg_font is %u %d %d %d\n",format, access, w, h);
+  SDL_SetColorKey(dbgfontsurf, SDL_TRUE, 0);
 
-	static Uint32 render_buffers[2][NES_PPU_H*NES_PPU_W];
-	back_buffer  = render_buffers[0];
-	front_buffer = render_buffers[1];
+  dbg_font = SDL_CreateTextureFromSurface(renderer,dbgfontsurf);
+  SDL_FreeSurface(dbgfontsurf);
 
-	// Audio
+  uint32_t format; int access, w, h;
+  SDL_QueryTexture(dbg_font, &format, &access, &w, &h);
 
-	SDL_AudioSpec want;
-	SDL_zero(want);
-	want.freq     = sample_rate;
-	want.format   = AUDIO_S16SYS;
-	want.channels = 1;
-	want.samples  = sdl_audio_buffer_size;
-	want.callback = audio_callback;
+  printf("dbg_font is %u %d %d %d\n",format, access, w, h);
 
-	fail_if(!(audio_device_id = SDL_OpenAudioDevice(0, 0, &want, 0, 0)),
-			"failed to initialize audio: %s\n", SDL_GetError());
+  static Uint32 render_buffers[2][NES_PPU_H*NES_PPU_W];
+  back_buffer  = render_buffers[0];
+  front_buffer = render_buffers[1];
 
-	// Input
+  // Audio
 
-	// We use SDL_GetKey/MouseState() instead
-	SDL_EventState(SDL_MOUSEBUTTONDOWN, SDL_IGNORE);
-	SDL_EventState(SDL_MOUSEBUTTONUP  , SDL_IGNORE);
-	//SDL_EventState(SDL_KEYUP          , SDL_IGNORE);
-	SDL_EventState(SDL_MOUSEMOTION    , SDL_IGNORE);
+  SDL_AudioSpec want;
+  SDL_zero(want);
+  want.freq     = sample_rate;
+  want.format   = AUDIO_S16SYS;
+  want.channels = 1;
+  want.samples  = sdl_audio_buffer_size;
+  want.callback = audio_callback;
 
-	// Ignore window events for now
-	//SDL_EventState(SDL_WINDOWEVENT, SDL_IGNORE);
+  fail_if(!(audio_device_id = SDL_OpenAudioDevice(0, 0, &want, 0, 0)),
+      "failed to initialize audio: %s\n", SDL_GetError());
 
+  // Input
 
-	int oldksz = keys_size;
-	keys = SDL_GetKeyboardState(&keys_size);
-	if (keys_size != oldksz) keys_lf = (Uint8*) realloc(keys_lf, keys_size * sizeof(Uint8));
+  // We use SDL_GetKey/MouseState() instead
+  SDL_EventState(SDL_MOUSEBUTTONDOWN, SDL_IGNORE);
+  SDL_EventState(SDL_MOUSEBUTTONUP  , SDL_IGNORE);
+  //SDL_EventState(SDL_KEYUP          , SDL_IGNORE);
+  SDL_EventState(SDL_MOUSEMOTION    , SDL_IGNORE);
 
-	// SDL thread synchronization
+  // Ignore window events for now
+  //SDL_EventState(SDL_WINDOWEVENT, SDL_IGNORE);
 
-	fail_if(!(event_lock = SDL_CreateMutex()),
-			"failed to create event mutex: %s", SDL_GetError());
+  add_default_binds();
 
-	fail_if(!(frame_lock = SDL_CreateMutex()),
-			"failed to create frame mutex: %s", SDL_GetError());
-	fail_if(!(frame_available_cond = SDL_CreateCond()),
-			"failed to create frame condition variable: %s", SDL_GetError());
+  int oldksz = keys_size;
+  keys = SDL_GetKeyboardState(&keys_size);
+  if (keys_size != oldksz) keys_lf = (Uint8*) realloc(keys_lf, keys_size * sizeof(Uint8));
+
+  // SDL thread synchronization
+
+  fail_if(!(event_lock = SDL_CreateMutex()),
+      "failed to create event mutex: %s", SDL_GetError());
+
+  fail_if(!(frame_lock = SDL_CreateMutex()),
+      "failed to create frame mutex: %s", SDL_GetError());
+  fail_if(!(frame_available_cond = SDL_CreateCond()),
+      "failed to create frame condition variable: %s", SDL_GetError());
 }
 
 void sdldbg_scroll(void) {
-	memcpy(debug_contents, debug_contents + DBG_COLUMNS, DBG_COLUMNS*(DBG_ROWS-1));
-	memcpy(debug_colors, debug_colors + DBG_COLUMNS, DBG_COLUMNS*(DBG_ROWS-1));
-	memset(debug_contents + DBG_COLUMNS*(DBG_ROWS-1), 0, DBG_COLUMNS);
-	memset(debug_colors + DBG_COLUMNS*(DBG_ROWS-1), 0, DBG_COLUMNS);
+  memcpy(debug_contents, debug_contents + DBG_COLUMNS, DBG_COLUMNS*(DBG_ROWS-1));
+  memcpy(debug_colors, debug_colors + DBG_COLUMNS, DBG_COLUMNS*(DBG_ROWS-1));
+  memset(debug_contents + DBG_COLUMNS*(DBG_ROWS-1), 0, DBG_COLUMNS);
+  memset(debug_colors + DBG_COLUMNS*(DBG_ROWS-1), 0, DBG_COLUMNS);
 }
 
 int sdldbg_puts(const char* s) {
 
-	const unsigned char* curchar = (const unsigned char*) s;
+  const unsigned char* curchar = (const unsigned char*) s;
 
-	while (*curchar) {
+  while (*curchar) {
 
-		if ((*curchar >= 32) && (*curchar < 128)) {
-			debug_contents[debug_cur_y * DBG_COLUMNS + debug_cur_x] = *curchar;
-			debug_colors[debug_cur_y * DBG_COLUMNS + debug_cur_x] = debug_cur_color;
-			debug_cur_x++;
-		}
-		if ((*curchar == 10) || (*curchar == 13)) {
-			debug_cur_y++;
-			debug_cur_x = 0;
-		}
-		if ((*curchar >= 240)) {
-			debug_cur_color = (*curchar) - 240;
-		}
+    if ((*curchar >= 32) && (*curchar < 128)) {
+      debug_contents[debug_cur_y * DBG_COLUMNS + debug_cur_x] = *curchar;
+      debug_colors[debug_cur_y * DBG_COLUMNS + debug_cur_x] = debug_cur_color;
+      debug_cur_x++;
+    }
+    if ((*curchar == 10) || (*curchar == 13)) {
+      debug_cur_y++;
+      debug_cur_x = 0;
+    }
+    if ((*curchar >= 240)) {
+      debug_cur_color = (*curchar) - 240;
+    }
 
-		curchar++;
-		if (debug_cur_x >= DBG_COLUMNS) {debug_cur_x = 0; debug_cur_y++;}
-		if (debug_cur_y >= DBG_ROWS) {sdldbg_scroll(); debug_cur_y = (DBG_ROWS-1);}
-	}
-	return 0;
+    curchar++;
+    if (debug_cur_x >= DBG_COLUMNS) {debug_cur_x = 0; debug_cur_y++;}
+    if (debug_cur_y >= DBG_ROWS) {sdldbg_scroll(); debug_cur_y = (DBG_ROWS-1);}
+  }
+  return 0;
 }
 
 int sdldbg_mvputs(const char x, const char y,const char* s) {
-	debug_cur_x = x; debug_cur_y = y;
-	return sdldbg_puts(s);
+  debug_cur_x = x; debug_cur_y = y;
+  return sdldbg_puts(s);
 }
 
 int sdldbg_vprintf(const char* format, va_list ap) {
 
-	int len = 64;
+  int len = 64;
 
-	char* o_text = (char*)malloc(len);
+  char* o_text = (char*)malloc(len);
 
-	int n = vsnprintf(o_text, len, format, ap);
-	if ((n+1) > len) {
-		o_text = (char*)realloc(o_text, n+1);
-		n = vsnprintf(o_text, n+1, format, ap);
-	}
+  int n = vsnprintf(o_text, len, format, ap);
+  if ((n+1) > len) {
+    o_text = (char*)realloc(o_text, n+1);
+    n = vsnprintf(o_text, n+1, format, ap);
+  }
 
 
-	//puts(o_text);
+  //puts(o_text);
 
-	int r = sdldbg_puts(o_text);
-	free(o_text);
-	return r;
+  int r = sdldbg_puts(o_text);
+  free(o_text);
+  return r;
 }
 
 int sdldbg_printf(const char* format, ...) {
 
-	va_list ap;
+  va_list ap;
 
-	va_start(ap, format);
-	int r = sdldbg_vprintf(format, ap);
-	va_end(ap);
+  va_start(ap, format);
+  int r = sdldbg_vprintf(format, ap);
+  va_end(ap);
 
-	return r;
+  return r;
 }
 
 int sdldbg_clear(int width, int height) {
-	for (int iy = debug_cur_y; iy < (debug_cur_y + height); iy++) {
-		memset(debug_contents + iy*DBG_COLUMNS + debug_cur_x, 0, width);
-		memset(debug_colors + iy*DBG_COLUMNS + debug_cur_x, 0, width);
-	}
-	return 0;
+  for (int iy = debug_cur_y; iy < (debug_cur_y + height); iy++) {
+    memset(debug_contents + iy*DBG_COLUMNS + debug_cur_x, 0, width);
+    memset(debug_colors + iy*DBG_COLUMNS + debug_cur_x, 0, width);
+  }
+  return 0;
 }
 
 int sdldbg_mvprintf(int x, int y, const char* format, ...) {
 
-	va_list ap;
+  va_list ap;
 
-	va_start(ap, format);
-	debug_cur_x = x; debug_cur_y = y;
-	int r = sdldbg_vprintf(format, ap) ;
-	va_end(ap);
-	return r;
+  va_start(ap, format);
+  debug_cur_x = x; debug_cur_y = y;
+  int r = sdldbg_vprintf(format, ap) ;
+  va_end(ap);
+  return r;
 }
 
 int sdldbg_move(int x, int y) {
-	debug_cur_x = x; debug_cur_y = y;
-	return 0;
+  debug_cur_x = x; debug_cur_y = y;
+  return 0;
 }
 
 int sdldbg_mvclear(int x, int y, int width, int height) {
-	sdldbg_move(x,y);
-	return sdldbg_clear(width, height);
+  sdldbg_move(x,y);
+  return sdldbg_clear(width, height);
 }
 
 int sdldbg_getkey_nonblock(void) {
 
-	int r = lastdbgkey;
-	if (r) {
-		lastdbgkey = 0;
-		return r;
-	} else return 0;
+  int r = lastdbgkey;
+  if (r) {
+    lastdbgkey = 0;
+    return r;
+  } else return 0;
 }
 
 int sdldbg_getkey(void) {
 
-    	int pb = audio_pause(1);
-	show_debugger = 1;
+  int pb = audio_pause(1);
+  show_debugger = 1;
 
-	Uint8 bk_contents[DBG_COLUMNS], bk_colors[DBG_COLUMNS];
-	memcpy(bk_contents, debug_contents + (DBG_COLUMNS * (DBG_ROWS-1)), DBG_COLUMNS);
-	memcpy(bk_colors, debug_colors + (DBG_COLUMNS * (DBG_ROWS-1)), DBG_COLUMNS);
+  Uint8 bk_contents[DBG_COLUMNS], bk_colors[DBG_COLUMNS];
+  memcpy(bk_contents, debug_contents + (DBG_COLUMNS * (DBG_ROWS-1)), DBG_COLUMNS);
+  memcpy(bk_colors, debug_colors + (DBG_COLUMNS * (DBG_ROWS-1)), DBG_COLUMNS);
 
-	sdldbg_mvputs(0, (DBG_ROWS-1), " \xF1?\xF0 ");
+  sdldbg_mvputs(0, (DBG_ROWS-1), " \xF1?\xF0 ");
 
-	int keycode = 0;
+  int keycode = 0;
 
-	int loop = 1;
+  int loop = 1;
 
-	while (loop) {
+  while (loop) {
 
-		draw_frame();
-		SDL_Event event;
-		SDL_WaitEvent(&event);
-		int mods = 0;
-		switch (event.type) {
+    draw_frame();
+    SDL_Event event;
+    SDL_WaitEvent(&event);
+    int mods = 0;
+    switch (event.type) {
 
-			case SDL_KEYDOWN:
-					keycode = event.key.keysym.sym;
-					mods = SDL_GetModState();
-					if ((mods & KMOD_SHIFT)) keycode |= KM_SHIFT;
-					if ((mods & KMOD_CTRL)) keycode |= KM_CTRL;
-					if ((mods & KMOD_ALT)) keycode |= KM_ALT;
-					loop = 0;
-				break;
-			case SDL_KEYUP:
-				break;
-			default:
-				process_events_sub(event);
-				break;
-		}
-	}
+      case SDL_KEYDOWN:
+	keycode = event.key.keysym.sym;
+	mods = SDL_GetModState();
+	if ((mods & KMOD_SHIFT)) keycode |= KM_SHIFT;
+	if ((mods & KMOD_CTRL)) keycode |= KM_CTRL;
+	if ((mods & KMOD_ALT)) keycode |= KM_ALT;
+	loop = 0;
+	break;
+      case SDL_KEYUP:
+	break;
+      default:
+	process_events_sub(event);
+	break;
+    }
+  }
 
-	memcpy(debug_contents + (DBG_COLUMNS * (DBG_ROWS-1)), bk_contents, DBG_COLUMNS);
-	memcpy(debug_colors + (DBG_COLUMNS * (DBG_ROWS-1)), bk_colors, DBG_COLUMNS);
-	audio_pause(pb);
-	return keycode;
+  memcpy(debug_contents + (DBG_COLUMNS * (DBG_ROWS-1)), bk_contents, DBG_COLUMNS);
+  memcpy(debug_colors + (DBG_COLUMNS * (DBG_ROWS-1)), bk_colors, DBG_COLUMNS);
+  audio_pause(pb);
+  return keycode;
 }
 
 int sdl_text_prompt(const char* prompt, char* value, size_t value_sz) {
 
-    	int pb = audio_pause(1);
-	show_debugger = 1;
+  int pb = audio_pause(1);
+  show_debugger = 1;
 
-	Uint8 bk_contents[DBG_COLUMNS*2], bk_colors[DBG_COLUMNS*2];
-	memcpy(bk_contents, debug_contents + (DBG_COLUMNS * (DBG_ROWS-2)), (DBG_COLUMNS*2));
-	memcpy(bk_colors, debug_colors + (DBG_COLUMNS * (DBG_ROWS-2)), (DBG_COLUMNS*2));
+  Uint8 bk_contents[DBG_COLUMNS*2], bk_colors[DBG_COLUMNS*2];
+  memcpy(bk_contents, debug_contents + (DBG_COLUMNS * (DBG_ROWS-2)), (DBG_COLUMNS*2));
+  memcpy(bk_colors, debug_colors + (DBG_COLUMNS * (DBG_ROWS-2)), (DBG_COLUMNS*2));
 
-	memset(debug_contents + (DBG_COLUMNS*(DBG_ROWS-2)), 0, DBG_COLUMNS*2);
-	memset(debug_colors + (DBG_COLUMNS*(DBG_ROWS-2)), 0, DBG_COLUMNS*2);
+  memset(debug_contents + (DBG_COLUMNS*(DBG_ROWS-2)), 0, DBG_COLUMNS*2);
+  memset(debug_colors + (DBG_COLUMNS*(DBG_ROWS-2)), 0, DBG_COLUMNS*2);
 
-	sdldbg_mvputs(0, (DBG_ROWS-2), prompt);
-	sdldbg_mvputs(0, (DBG_ROWS-1), " \xF3>\xF0 ");
+  sdldbg_mvputs(0, (DBG_ROWS-2), prompt);
+  sdldbg_mvputs(0, (DBG_ROWS-1), " \xF3>\xF0 ");
 
-	char new_textinput[value_sz];
-	strcpy(new_textinput,value);
+  char new_textinput[value_sz];
+  strcpy(new_textinput,value);
 
-	bool loop = 1, success = 0;
+  bool loop = 1, success = 0;
 
-	SDL_StartTextInput();
-	ignore_events = 1;
-	while (loop) {
+  SDL_StartTextInput();
+  ignore_events = 1;
+  while (loop) {
 
-		sdldbg_mvprintf(3, (DBG_ROWS-1), "%s\x7F ", new_textinput);
-		draw_frame();
+    sdldbg_mvprintf(3, (DBG_ROWS-1), "%s\x7F ", new_textinput);
+    draw_frame();
 
-		SDL_Event event;
+    SDL_Event event;
 
-		SDL_WaitEvent(&event);
-		switch (event.type) {
+    SDL_WaitEvent(&event);
+    switch (event.type) {
 
-			case SDL_KEYDOWN:
-				if ((event.key.keysym.sym == SDLK_BACKSPACE) && (strlen(new_textinput) > 0)) {
-					new_textinput[strlen(new_textinput)-1] = 0;
-				}
-				if (event.key.keysym.sym == SDLK_RETURN) {
-					loop = 0;
-					success = 1;
-				}
-				if (event.key.keysym.sym == SDLK_ESCAPE) {
-					loop = 0;
-					success = 0;
-				}
-
-				break;
-			case SDL_KEYUP:
-				break;
-
-			case SDL_TEXTINPUT:
-				//printf("got text input: %s\n",event.text.text);
-				if ((strlen(event.text.text) != 1) || (event.text.text[0] < 0)) break; //we do not accept unicode
-
-				if ((strlen(new_textinput) + strlen(event.text.text)) < value_sz) {
-					strcat(new_textinput,event.text.text);
-				}
-				break;
-			default:
-				process_events_sub(event);
-
-				break;
-		}
+      case SDL_KEYDOWN:
+	if ((event.key.keysym.sym == SDLK_BACKSPACE) && (strlen(new_textinput) > 0)) {
+	  new_textinput[strlen(new_textinput)-1] = 0;
+	}
+	if (event.key.keysym.sym == SDLK_RETURN) {
+	  loop = 0;
+	  success = 1;
+	}
+	if (event.key.keysym.sym == SDLK_ESCAPE) {
+	  loop = 0;
+	  success = 0;
 	}
 
-	ignore_events = 0;
-	SDL_StopTextInput();
+	break;
+      case SDL_KEYUP:
+	break;
 
-	if (success) strncpy(value,new_textinput,value_sz);
+      case SDL_TEXTINPUT:
+	//printf("got text input: %s\n",event.text.text);
+	if ((strlen(event.text.text) != 1) || (event.text.text[0] < 0)) break; //we do not accept unicode
 
-	memcpy(debug_contents + (DBG_COLUMNS * (DBG_ROWS-2)),bk_contents, (DBG_COLUMNS*2));
-	memcpy(debug_colors + (DBG_COLUMNS * (DBG_ROWS-2)),bk_colors, (DBG_COLUMNS*2));
-	audio_pause(pb);
-	return success;
+	if ((strlen(new_textinput) + strlen(event.text.text)) < value_sz) {
+	  strcat(new_textinput,event.text.text);
+	}
+	break;
+      default:
+	process_events_sub(event);
+
+	break;
+    }
+  }
+
+  ignore_events = 0;
+  SDL_StopTextInput();
+
+  if (success) strncpy(value,new_textinput,value_sz);
+
+  memcpy(debug_contents + (DBG_COLUMNS * (DBG_ROWS-2)),bk_contents, (DBG_COLUMNS*2));
+  memcpy(debug_colors + (DBG_COLUMNS * (DBG_ROWS-2)),bk_colors, (DBG_COLUMNS*2));
+  audio_pause(pb);
+  return success;
 }
 
 void deinit_sdl() {
-	SDL_DestroyRenderer(renderer); // Also destroys the texture
-	SDL_DestroyWindow(screen);
+  SDL_DestroyRenderer(renderer); // Also destroys the texture
+  SDL_DestroyWindow(screen);
 
-	SDL_DestroyMutex(event_lock);
+  SDL_DestroyMutex(event_lock);
 
-	SDL_DestroyMutex(frame_lock);
-	SDL_DestroyCond(frame_available_cond);
+  SDL_DestroyMutex(frame_lock);
+  SDL_DestroyCond(frame_available_cond);
 
-	SDL_CloseAudioDevice(audio_device_id); // Prolly not needed, but play it safe
-	SDL_Quit();
+  SDL_CloseAudioDevice(audio_device_id); // Prolly not needed, but play it safe
+  SDL_Quit();
 }
