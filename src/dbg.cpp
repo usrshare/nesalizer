@@ -22,8 +22,10 @@ static uint16_t scroll_cpumem = 0;
 
 static uint16_t scroll_mem = 0;
 static uint16_t cursor_mem = 0;
+
 static bool mem_insert_mode = false;
 static bool mem_upper_nibble = 0;
+static uint8_t mem_insert_byte = 0x0;
 
 int set_debugger_vis(bool vis) {
   if (vis) {
@@ -832,9 +834,9 @@ static void dbg_kbdinput(int keycode) {
 		       uint8_t oldval = read_without_side_effects(cursor_mem);
 
 		       if (mem_upper_nibble) {
-			 write_mem_inst ((oldval & 0xF) | (hexval << 4), cursor_mem);
+			 mem_byte = mem_insert_byte << 4;
 		       } else {
-			 write_mem_inst ((oldval & 0xF0) | hexval, cursor_mem);
+			 write_mem_inst (mem_insert_byte | hexval, cursor_mem);
 		       }
 
 		       if (!mem_upper_nibble) cursor_mem += 1;
