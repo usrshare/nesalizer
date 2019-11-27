@@ -834,7 +834,7 @@ static void dbg_kbdinput(int keycode) {
 		       uint8_t oldval = read_without_side_effects(cursor_mem);
 
 		       if (mem_upper_nibble) {
-			 mem_byte = mem_insert_byte << 4;
+			 mem_insert_byte = hexval << 4;
 		       } else {
 			 write_mem_inst (mem_insert_byte | hexval, cursor_mem);
 		       }
@@ -905,7 +905,7 @@ void dbg_redraw_cpu() {
 
     for (int ix=0; ix<32; ix++) {
 
-      int r = read_without_side_effects(scroll_mem + (16*iy) + ix);
+      int r = read_without_side_effects(scroll_cpumem + (32*iy) + ix);
       if (r == -1) {
 	sdldbg_printf("%c??", ( (ix%8 == 0) ? 0366 : ((ix%2) ? 0364 : 0360) ));
       } else {
